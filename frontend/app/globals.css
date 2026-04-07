@@ -1,0 +1,55 @@
+/* globals.css — design system tokens, import di layout.tsx */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* ── Warna dasar ─────────────────────── */
+  --bg:          #f5f6fa;      /* page background */
+  --surface:     #ffffff;      /* card / panel */
+  --surface-2:   #f9fafc;      /* tabel header, input bg */
+  --border:      #e4e7ef;      /* border normal */
+  --border-soft: #eef0f7;      /* border lebih tipis */
+
+  /* ── Teks ────────────────────────────── */
+  --text-primary:   #111827;
+  --text-secondary: #4b5563;
+  --text-muted:     #9ca3af;
+
+  /* ── Aksen ───────────────────────────── */
+  --blue:        #2563eb;
+  --blue-soft:   #eff4ff;
+  --blue-border: #bfcffd;
+
+  --green:       #16a34a;
+  --green-soft:  #f0fdf4;
+  --green-border:#bbf7d0;
+
+  --red:         #dc2626;
+  --red-soft:    #fff1f2;
+  --red-border:  #fecaca;
+
+  --amber:       #d97706;
+  --amber-soft:  #fffbeb;
+  --amber-border:#fde68a;
+
+  /* ── Typografi ───────────────────────── */
+  --font:  'Plus Jakarta Sans', sans-serif;
+  --mono:  'JetBrains Mono', monospace;
+
+  /* ── Radius & shadow ─────────────────── */
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  --shadow-lg:  0 20px 60px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06);
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}

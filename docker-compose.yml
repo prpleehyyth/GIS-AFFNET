@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Database PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: affnet_db
+    restart: always
+    environment:
+      # Mengambil nilai dari file .env
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT_EXTERNAL:-5432}:5432"
+    volumes:
+      - affnet_pgdata:/var/lib/postgresql/data
+
+  # Backend Golang
+  # Backend Golang
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend/Dockerfile
+    container_name: affnet_backend
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+    # Ganti blok 'environment:' yang lama dengan 'env_file:' ini:
+    env_file:
+      - .env
+
+  # Frontend Next.js
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend/Dockerfile
+    container_name: affnet_frontend
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      # Panggil API melalui Nginx (port 80), bukan langsung ke backend
+      - NEXT_PUBLIC_API_URL=http://localhost/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: affnet_nginx
+    restart: always
+    ports:
+      - "8888:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  affnet_pgdata:
