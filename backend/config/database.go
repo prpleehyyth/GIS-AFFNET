@@ -20,7 +20,7 @@ func ConnectDB() {
 	}
 
 	// AutoMigrate sekarang merujuk ke struktur yang BENAR di folder models
-	err = database.AutoMigrate(&models.Odp{}, &models.Onu{}, &models.User{})
+	err = database.AutoMigrate(&models.Odp{}, &models.Onu{}, &models.User{}, &models.Log{})
 	if err != nil {
 		log.Fatal("Gagal melakukan migrasi tabel: ", err)
 	}

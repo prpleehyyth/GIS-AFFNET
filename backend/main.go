@@ -55,6 +55,16 @@ func main() {
 
 		// Infrastructure Monitoring
 		api.GET("/zabbix-infra", controllers.GetZabbixInfra) // Mikrotik & OLT
+
+		//Write Logs
+		// Write Logs
+		api.GET("/logs",                   controllers.GetLogs)
+		api.POST("/logs",                  controllers.CreateLog)
+		api.PUT("/logs/:id/resolve",       controllers.ResolveLog)
+		api.POST("/logs/resolve-by-title", controllers.ResolveLogByTitle)
+		api.DELETE("/logs/:id",            controllers.DeleteLog)
+		api.DELETE("/logs/resolved",       controllers.ClearResolvedLogs)
+
 	}
 
 	// Menjalankan server pada port 8080

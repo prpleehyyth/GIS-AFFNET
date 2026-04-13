@@ -17,6 +17,7 @@ import {
   SignalBars, StatusBadge, pp,
   buildNotifs,
 } from './Components';
+import { writeLog, resolveLog } from '@/lib/logService';
 import styles from './map.module.css';
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string;
@@ -53,7 +54,6 @@ function Polyline({ path, options }: { path: google.maps.LatLngLiteral[]; option
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
-  // Update path & options saat data berubah tanpa remount
   useEffect(() => {
     if (!ref.current) return;
     ref.current.setPath(path);
@@ -94,22 +94,30 @@ export default function MapView() {
   const [notifs,    setNotifs]      = useState<Notif[]>([]);
   const [panelOpen, setPanelOpen]   = useState(false);
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
-  const seenIds = useRef<Set<string>>(new Set());
 
-  // Pastikan komponen sudah ter-mount di client (Mencegah blank screen saat pindah page)
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const seenIds      = useRef<Set<string>>(new Set());
+  const firstSeenAt  = useRef<Map<string, Date>>(new Map());
+
+  // activeErrors disimpan di localStorage supaya tidak reset saat navigasi
+  const getActiveErrors = () => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem('ae') || '[]')); }
+    catch { return new Set<string>(); }
+  };
+  const saveActiveErrors = (s: Set<string>) => {
+    localStorage.setItem('ae', JSON.stringify([...s]));
+  };
+
+  useEffect(() => { setIsMounted(true); }, []);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [onuRes, infraRes, odpRes] = await Promise.all([
-        fetch('http://localhost:8888/api/onu'),
-        fetch('http://localhost:8888/api/zabbix-infra'),
-        fetch('http://localhost:8888/api/odp'),
-      ]);
+      const opts = { credentials: 'include' as RequestCredentials };
       const [onuData, infraData, odpData] = await Promise.all([
-        onuRes.json(), infraRes.json(), odpRes.json(),
+        fetch('http://localhost:8888/api/onu',          opts).then(r => r.json()),
+        fetch('http://localhost:8888/api/zabbix-infra', opts)
+          .then(r => r.ok ? r.json() : { result: [] })
+          .catch(() => ({ result: [] })),
+        fetch('http://localhost:8888/api/odp',          opts).then(r => r.json()),
       ]);
 
       const allOnus   = Array.isArray(onuData)   ? onuData   : (onuData.result   || []);
@@ -120,22 +128,68 @@ export default function MapView() {
       setInfras(allInfras.filter((i: Infra) => i.inventory?.location_lat && i.inventory?.location_lon));
       setOdps(allOdps.filter((o: Odp)     => o.latitude && o.longitude));
 
-      const fresh = buildNotifs(allOnus, allInfras);
+      // ── writeLog: ONU kritis ──────────────────────────────
+      // Hanya tulis log saat error BARU muncul (belum ada di activeErrors)
+      // Resolve saat kondisi kembali normal
+      const prevErrors    = getActiveErrors();
+      const currentErrors = new Set<string>();
+
+      allOnus.forEach((onu: Onu) => {
+        const rx  = parseFloat(onu.rx_power);
+        const key = `onu-crit-${onu.id}`;
+        if (rx <= -27) {
+          currentErrors.add(key);
+          if (!prevErrors.has(key)) {
+            writeLog('critical', 'ONU', onu.customer || onu.mac_address, `Sinyal kritis terdeteksi: ${onu.rx_power} dBm`);
+          }
+        } else if (prevErrors.has(key)) {
+          resolveLog(onu.customer || onu.mac_address, 'ONU');
+        }
+      });
+
+      // ── writeLog: Infra down ──────────────────────────────
+      allInfras.forEach((infra: Infra) => {
+        const isDown  = infra.interfaces?.some((i: any) => i.available === '2') || false;
+        const isMikro = infra.name.toLowerCase().includes('mikrotik');
+        const key     = `infra-${infra.hostid}`;
+        if (isDown) {
+          currentErrors.add(key);
+          if (!prevErrors.has(key)) {
+            writeLog('critical', 'Infra', infra.name, `Perangkat ${isMikro ? 'router' : 'OLT'} tidak merespons`);
+          }
+        } else if (prevErrors.has(key)) {
+          resolveLog(infra.name, 'Infra');
+        }
+      });
+
+      // Simpan ke localStorage supaya persist saat navigasi
+      saveActiveErrors(currentErrors);
+
+      // ── Notif panel (tetap seperti sebelumnya) ────────────
+      const fresh    = buildNotifs(allOnus, allInfras);
+      const freshIds = new Set(fresh.map((n: any) => n.id));
+      const now      = new Date();
+
+      for (const id of firstSeenAt.current.keys()) {
+        if (!freshIds.has(id)) firstSeenAt.current.delete(id);
+      }
+      for (const n of fresh) {
+        if (!firstSeenAt.current.has(n.id)) firstSeenAt.current.set(n.id, now);
+      }
+
       setNotifs(prev => {
         const prevMap = new Map(prev.map(n => [n.id, n]));
-        return fresh.map(n => {
-          const existing = prevMap.get(n.id);
-          return {
-            ...n,
-            ts:   existing ? existing.ts : n.ts,
-            seen: existing?.seen ?? seenIds.current.has(n.id) ?? false,
-          };
-        });
+        return fresh.map((n: any) => ({
+          ...n,
+          ts:   firstSeenAt.current.get(n.id) ?? now,
+          seen: prevMap.get(n.id)?.seen ?? seenIds.current.has(n.id) ?? false,
+        }));
       });
+
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {
-      setIsLoading(false); // Hilangkan loading screen saat fetch selesai atau error
+      setIsLoading(false);
     }
   }, []);
 
@@ -161,12 +215,11 @@ export default function MapView() {
   const selectedOdp   = typeof selectedId === 'number' ? odps.find(o => o.id === selectedId && odps.some(x => x.id === selectedId)) : null;
   const selectedOnu   = typeof selectedId === 'number' ? onus.find(o => o.id === selectedId) : null;
 
-  // Render null sampai komponen siap di sisi klien untuk menghindari hydration error
   if (!isMounted) return null;
 
   return (
     <div className={styles.mapWrap} style={{ position: 'relative' }}>
-      
+
       {/* Loading Overlay */}
       {isLoading && (
         <div style={{

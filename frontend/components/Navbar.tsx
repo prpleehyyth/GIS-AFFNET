@@ -27,7 +27,6 @@ export default function Navbar() {
         console.log("3. Logout sukses! Mengarahkan ke /login...");
         localStorage.clear(); 
         sessionStorage.clear();
-        
         window.location.href = '/login';
       } else {
         const errText = await response.text();
@@ -37,8 +36,6 @@ export default function Navbar() {
 
     } catch (error) {
       console.error('Fetch gagal total:', error);
-      
-      // Pengecekan tipe error untuk memuaskan TypeScript
       if (error instanceof Error) {
         alert(`Error dari browser: ${error.message}`);
       } else {
@@ -48,10 +45,11 @@ export default function Navbar() {
   };
 
   const navLinks = [
-    { href: '/',    label: 'Dashboard',       icon: '▦' },
-    { href: '/odp', label: 'Manajemen ODP',   icon: '⬡' },
-    { href: '/onu', label: 'Manajemen ONU',   icon: '⊡' },
-    { href: '/map', label: 'Peta Topologi',   icon: '◈' },
+    { href: '/',     label: 'Dashboard',     icon: '▦' },
+    { href: '/odp',  label: 'Manajemen ODP', icon: '⬡' },
+    { href: '/onu',  label: 'Manajemen ONU', icon: '⊡' },
+    { href: '/map',  label: 'Peta Topologi', icon: '◈' },
+    { href: '/logs', label: 'Event Logs',    icon: '📋' },
   ];
 
   return (
