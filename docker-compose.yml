@@ -32,7 +32,7 @@ services:
       - ./backend:/app
     # Ganti blok 'environment:' yang lama dengan 'env_file:' ini:
     env_file:
-      - .env
+      - ./backend/.env
 
   # Frontend Next.js
   frontend:
