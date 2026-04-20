@@ -1,8 +1,8 @@
 import styles from './dashboard.module.css';
 
 // ── Types ─────────────────────────────────────────────────────
-export interface Onu   { rx_power: string; odp_id?: number | null; }
-export interface Odp   { id: number; total_port: number; type?: string; odc_id?: number | null; }
+export interface Onu { rx_power: string; odp_id?: number | null; }
+export interface Odp { id: number; total_port: number; type?: string; odc_id?: number | null; }
 export interface Infra { name: string; interfaces?: { type: string; available: string; }[]; }
 
 // ── Mini progress bar ─────────────────────────────────────────
@@ -64,8 +64,8 @@ export function CoreStatusCard({ isOltDown, isMikrotikDown, infraUnreachable }: 
           {infraUnreachable
             ? '🔴 Server monitoring tidak merespons'
             : isDegraded
-            ? '⚠️ Periksa koneksi backbone segera'
-            : '✓ Semua perangkat inti beroperasi normal'}
+              ? '⚠️ Periksa koneksi backbone segera'
+              : '✓ Semua perangkat inti beroperasi normal'}
         </span>
       </div>
     </div>
@@ -75,7 +75,8 @@ export function CoreStatusCard({ isOltDown, isMikrotikDown, infraUnreachable }: 
 // ── OdcStatusCard ─────────────────────────────────────────────
 interface OdcProps { totalOdc: number; fullOdcs: number; avgOdcUsage: number; }
 export function OdcStatusCard({ totalOdc, fullOdcs, avgOdcUsage }: OdcProps) {
-  const barColor = avgOdcUsage >= 80 ? 'var(--red)' : avgOdcUsage >= 60 ? 'var(--amber)' : '#7c3aed';
+  
+  const barColor = avgOdcUsage >= 80 ? 'var(--red)' : 'var(--green)';
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -83,7 +84,8 @@ export function OdcStatusCard({ totalOdc, fullOdcs, avgOdcUsage }: OdcProps) {
           <span className={styles.cardIcon}>🗄️</span>
           <span className={styles.cardLabel}>Distribusi ODC</span>
         </div>
-        <span className={styles.badgePurple}>{totalOdc} Titik</span>
+        {/* UBAH: badgePurple menjadi badgeBlack */}
+        <span className={styles.badgeBlack}>{totalOdc} Titik</span>
       </div>
 
       <div className={styles.bigStat}>
@@ -115,7 +117,10 @@ export function OdcStatusCard({ totalOdc, fullOdcs, avgOdcUsage }: OdcProps) {
 // ── OdpCapacityCard ───────────────────────────────────────────
 interface OdpProps { totalOdp: number; totalPorts: number; usedPorts: number; freePorts: number; usagePercent: number; }
 export function OdpCapacityCard({ totalOdp, totalPorts, usedPorts, freePorts, usagePercent }: OdpProps) {
-  const barColor = usagePercent >= 90 ? 'var(--red)' : usagePercent >= 70 ? 'var(--amber)' : '#7c3aed';
+  // UBAH: #7c3aed menjadi #000000
+  // < 70% Hijau | 70% - 89% Kuning | >= 90% Merah
+  const barColor = usagePercent >= 90 ? 'var(--red)' : usagePercent >= 70 ? 'var(--amber)' : 'var(--green)';
+
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -123,7 +128,8 @@ export function OdpCapacityCard({ totalOdp, totalPorts, usedPorts, freePorts, us
           <span className={styles.cardIcon}>🔌</span>
           <span className={styles.cardLabel}>Distribusi ODP</span>
         </div>
-        <span className={styles.badgePurple}>{totalOdp} Titik</span>
+        {/* UBAH: badgePurple menjadi badgeBlack */}
+        <span className={styles.badgeBlack}>{totalOdp} Titik</span>
       </div>
 
       <div className={styles.bigStat}>

@@ -55,12 +55,12 @@
 .cardLabel { font-size:11px; font-weight:700; color:var(--text-muted); letter-spacing:.08em; text-transform:uppercase; }
 
 /* ── BADGES ───────────────────────────── */
-.badgeSuccess, .badgeDanger, .badgePurple, .badgeBlue {
+.badgeSuccess, .badgeDanger, .badgeBlack, .badgeBlue {
   font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px;
 }
 .badgeSuccess { background:var(--green-soft);  color:var(--green); border:1px solid var(--green-border); }
 .badgeDanger  { background:var(--red-soft);    color:var(--red);   border:1px solid var(--red-border); }
-.badgePurple  { background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe; }
+.badgeBlack  { background:#f3f4f6; color:#000000; border:1px solid #d1d5db; }
 .badgeBlue    { background:var(--blue-soft);   color:var(--blue);  border:1px solid var(--blue-border); }
 
 /* ── DEVICE LIST (Core card) ──────────── */
