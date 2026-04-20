@@ -1,12 +1,9 @@
-"use client";
-
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styles from './navbar.module.css';
 
 export default function Navbar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   if (pathname === '/login') return null;
 
@@ -65,7 +62,7 @@ export default function Navbar() {
         {navLinks.map(({ href, label, icon }) => (
           <Link
             key={href}
-            href={href}
+            to={href}
             className={`${styles.link} ${pathname === href ? styles.linkActive : ''}`}
           >
             <span className={styles.linkIcon}>{icon}</span>

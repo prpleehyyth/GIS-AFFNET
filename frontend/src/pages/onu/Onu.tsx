@@ -1,6 +1,4 @@
-"use client";
-
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
 import { Onu, Odp, OnuForm, FilterMode, OnuTable, OnuModal } from './components';
 import styles from './onu.module.css';
@@ -93,7 +91,7 @@ export default function OnuPage() {
             <div className={styles.headerSub}>Optical Network Unit — Kelola data dan lokasi perangkat pelanggan</div>
           </div>
         </div>
-        <Link href="/" className={styles.backBtn}>← Kembali ke Peta</Link>
+        <Link to="/map" className={styles.backBtn}>← Kembali ke Peta</Link>
       </div>
 
       {/* Stats */}

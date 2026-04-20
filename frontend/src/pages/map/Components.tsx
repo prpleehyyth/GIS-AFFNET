@@ -1,4 +1,4 @@
-"use client";
+
 
 import { Notif, Severity } from './NotifPanel';
 

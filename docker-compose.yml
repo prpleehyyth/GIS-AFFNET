@@ -45,7 +45,7 @@ services:
       - backend
     environment:
       # Panggil API melalui Nginx (port 80), bukan langsung ke backend
-      - NEXT_PUBLIC_API_URL=http://localhost/api
+      - VITE_API_URL=http://localhost/api
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules

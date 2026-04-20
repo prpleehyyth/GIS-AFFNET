@@ -1,19 +1,19 @@
-"use client";
-
-import { useState,useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styles from './login.module.css';
 
 export default function LoginPage() {
+  const navigate = useNavigate();
 
   useEffect(() => {
     document.title = "Login | AFF NET GIS";
   }, []);
 
-  const [username,  setUsername]  = useState('');
-  const [password,  setPassword]  = useState('');
-  const [error,     setError]     = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showPass,  setShowPass]  = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +31,9 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        window.location.href = '/dashboard';
+        // PERBAIKAN: Simpan flag login ke Local Storage
+        localStorage.setItem('auth_token', data.token || 'true');
+        navigate('/dashboard');
       } else {
         setError(data.error || 'Username atau password salah.');
       }
@@ -48,7 +50,11 @@ export default function LoginPage() {
 
         {/* Brand */}
         <div className={styles.brand}>
-          <div className={styles.brandIcon}>📡</div>
+          <img
+            src="/logoicon.png"
+            alt="Logo AFF NET"
+            style={{ width: '40px', height: '40px', objectFit: 'contain' }}
+          />
           <div className={styles.brandName}>AFF NET</div>
           <div className={styles.brandSub}>GIS Platform · NOC Dashboard</div>
         </div>

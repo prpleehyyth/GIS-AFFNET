@@ -1,6 +1,4 @@
-"use client";
-
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
 import { Odp, OdpForm, OdpTable, OdpModal, DeleteConfirmModal } from './components';
 import { writeLog } from '@/lib/logService';
@@ -105,7 +103,7 @@ export default function OdpPage() {
             <div className={styles.headerSub}>Kelola titik distribusi jaringan fiber</div>
           </div>
         </div>
-        <Link href="/" className={styles.backBtn}>← Kembali ke Dashboard</Link>
+        <Link to="/dashboard" className={styles.backBtn}>← Kembali ke Dashboard</Link>
       </div>
 
       {/* Stats */}

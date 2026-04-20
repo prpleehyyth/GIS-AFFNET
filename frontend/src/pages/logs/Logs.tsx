@@ -1,6 +1,4 @@
-"use client";
-
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
 import {
   fetchLogs, resolveLogById, deleteLog, clearResolvedLogs,
@@ -78,7 +76,7 @@ export default function LogsPage() {
             <div className={styles.headerSub}>Riwayat kejadian jaringan dari semua sumber</div>
           </div>
         </div>
-        <Link href="/" className={styles.backBtn}>← Kembali ke Dashboard</Link>
+        <Link to="/" className={styles.backBtn}>← Kembali ke Dashboard</Link>
       </div>
 
       {/* Stats */}

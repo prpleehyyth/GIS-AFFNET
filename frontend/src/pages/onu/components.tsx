@@ -1,14 +1,35 @@
-"use client";
-
-import { useState } from 'react';
-import { 
-  APIProvider, 
-  Map as GMap, 
-  AdvancedMarker, 
-  Pin, 
-  InfoWindow 
-} from '@vis.gl/react-google-maps';
+import React, { useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import styles from './onu.module.css';
+
+// Fix leaflet default icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Custom icons
+const blueIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const blackIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [20, 33],
+  iconAnchor: [10, 33],
+  popupAnchor: [1, -27],
+  shadowSize: [33, 33]
+});
 
 // ── Types ────────────────────────────────────────────────────
 export interface Onu {
@@ -34,6 +55,16 @@ export interface OnuForm {
   odp_id: string;
 }
 export type FilterMode = 'all' | 'complete' | 'incomplete';
+
+// ── Leaflet Maps click handler ────────────────────────────────
+function MapClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) {
+      onPick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
 
 // ── OnuTable ─────────────────────────────────────────────────
 interface TableProps {
@@ -138,22 +169,10 @@ interface ModalProps {
   onOdpChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }
 export function OnuModal({ onu, form, setForm, odps, isLoading, onClose, onSubmit, onMapClick, onOdpChange }: ModalProps) {
-  const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string;
-  const MAP_ID = process.env.NEXT_PUBLIC_MAP_ID as string;
 
-  const [activeInfoId, setActiveInfoId] = useState<number | string | null>(null);
-
-  const center = form.latitude && form.longitude
-    ? { lat: parseFloat(form.latitude), lng: parseFloat(form.longitude) }
-    : { lat: -7.536199, lng: 112.436890 };
-
-  // Tangkap event klik dari Google Maps
-  const handleMapClick = (e: any) => {
-    if (e.detail.latLng) {
-      onMapClick(e.detail.latLng.lat, e.detail.latLng.lng);
-      setActiveInfoId('new');
-    }
-  };
+  const center: [number, number] = form.latitude && form.longitude
+    ? [parseFloat(form.latitude), parseFloat(form.longitude)]
+    : [-7.536199, 112.436890];
 
   return (
     <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -224,61 +243,45 @@ export function OnuModal({ onu, form, setForm, odps, isLoading, onClose, onSubmi
           <div className={styles.mapSide}>
             <div className={styles.mapLabel}>🖱️ Klik peta untuk geser titik lokasi</div>
             <div style={{ height: '100%', width: '100%', position: 'relative', borderRadius: '8px', overflow: 'hidden' }}>
-              <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
-                <GMap
-                  defaultCenter={center}
-                  defaultZoom={16}
-                  mapId={MAP_ID}
-                  mapTypeId={'hybrid'}
-                  onClick={handleMapClick}
-                  disableDefaultUI={false}
-                  gestureHandling={'greedy'}
-                >
-                  
-                  {/* Marker biru: lokasi pelanggan */}
-                  {form.latitude && form.longitude && (
-                    <AdvancedMarker 
-                      position={{ lat: parseFloat(form.latitude), lng: parseFloat(form.longitude) }}
-                      onClick={() => setActiveInfoId('new')}
-                    >
-                      <Pin background="#3b82f6" borderColor="#fff" glyphColor="#fff" scale={1.2} />
-                      {activeInfoId === 'new' && (
-                        <InfoWindow 
-                          position={{ lat: parseFloat(form.latitude), lng: parseFloat(form.longitude) }}
-                          onCloseClick={() => setActiveInfoId(null)}
-                        >
-                          <div style={{ padding: '4px', color: '#1e293b' }}>
-                            <strong>{form.customer || 'Lokasi Pelanggan'}</strong>
-                          </div>
-                        </InfoWindow>
-                      )}
-                    </AdvancedMarker>
-                  )}
+              <MapContainer
+                center={center}
+                zoom={16}
+                style={{ width: '100%', height: '100%', zIndex: 0 }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <MapClickHandler onPick={onMapClick} />
+                
+                {/* Marker biru: lokasi pelanggan */}
+                {form.latitude && form.longitude && (
+                  <Marker 
+                    position={[parseFloat(form.latitude), parseFloat(form.longitude)]}
+                    icon={blueIcon}
+                  >
+                    <Popup>
+                      <div style={{ padding: '4px', color: '#1e293b' }}>
+                        <strong>{form.customer || 'Lokasi Pelanggan'}</strong>
+                      </div>
+                    </Popup>
+                  </Marker>
+                )}
 
-                  {/* Marker hitam: referensi ODP */}
-                  {odps.filter(o => o.latitude).map(odp => (
-                    <AdvancedMarker 
-                      key={`odp-${odp.id}`} 
-                      position={{ lat: parseFloat(odp.latitude), lng: parseFloat(odp.longitude) }}
-                      onClick={() => setActiveInfoId(odp.id)}
-                    >
-                      <Pin background="#475569" borderColor="#fff" glyphColor="#fff" scale={0.9} />
-                      {activeInfoId === odp.id && (
-                        <InfoWindow 
-                          position={{ lat: parseFloat(odp.latitude), lng: parseFloat(odp.longitude) }}
-                          onCloseClick={() => setActiveInfoId(null)}
-                        >
-                          <div style={{ padding: '4px', color: '#1e293b' }}>
-                            <strong>{odp.name}</strong><br />
-                            <span style={{ fontSize: '12px' }}>Titik ODP Referensi</span>
-                          </div>
-                        </InfoWindow>
-                      )}
-                    </AdvancedMarker>
-                  ))}
+                {/* Marker hitam: referensi ODP */}
+                {odps.filter(o => o.latitude).map(odp => (
+                  <Marker 
+                    key={`odp-${odp.id}`} 
+                    position={[parseFloat(odp.latitude), parseFloat(odp.longitude)]}
+                    icon={blackIcon}
+                  >
+                    <Popup>
+                      <div style={{ padding: '4px', color: '#1e293b' }}>
+                        <strong>{odp.name}</strong><br />
+                        <span style={{ fontSize: '12px' }}>Titik ODP Referensi</span>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
 
-                </GMap>
-              </APIProvider>
+              </MapContainer>
             </div>
           </div>
 

@@ -1,6 +1,4 @@
-"use client";
-
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
   Onu, Odp, Infra,
@@ -97,7 +95,7 @@ export default function Dashboard() {
           <span className={styles.lastUpdate}>
             Diperbarui: {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
           </span>
-          <Link href="/map" className={styles.mapBtn}>Peta Jaringan →</Link>
+          <Link to="/map" className={styles.mapBtn}>Peta Jaringan →</Link>
         </div>
       </header>
 
