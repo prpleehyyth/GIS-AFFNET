@@ -2,20 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import styles from './Navbar.module.css';
+import styles from './navbar.module.css';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
 
   if (pathname === '/login') return null;
 
   const handleLogout = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault(); 
-    
+    e.preventDefault();
+
     try {
       console.log("1. Mengirim request logout ke Nginx/Backend...");
-      
       const response = await fetch('/api/logout', {
         method: 'POST',
         credentials: 'include',
@@ -25,7 +24,7 @@ export default function Navbar() {
 
       if (response.ok) {
         console.log("3. Logout sukses! Mengarahkan ke /login...");
-        localStorage.clear(); 
+        localStorage.clear();
         sessionStorage.clear();
         window.location.href = '/login';
       } else {
@@ -33,31 +32,29 @@ export default function Navbar() {
         console.error("Backend menolak:", errText);
         alert(`Gagal logout dari server. Status: ${response.status}`);
       }
-
     } catch (error) {
       console.error('Fetch gagal total:', error);
-      if (error instanceof Error) {
-        alert(`Error dari browser: ${error.message}`);
-      } else {
-        alert(`Error dari browser: ${String(error)}`);
-      }
+      alert(`Error dari browser: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
   const navLinks = [
-    { href: '/',     label: 'Dashboard',     icon: '▦' },
-    { href: '/odp',  label: 'Manajemen ODP', icon: '⬡' },
-    { href: '/onu',  label: 'Manajemen ONU', icon: '⊡' },
-    { href: '/map',  label: 'Peta Topologi', icon: '◈' },
-    { href: '/logs', label: 'Event Logs',    icon: '📋' },
+    { href: '/', label: 'Dashboard', icon: '▦' },
+    { href: '/odp', label: 'Manajemen ODP', icon: '⬡' },
+    { href: '/onu', label: 'Manajemen ONU', icon: '⊡' },
+    { href: '/map', label: 'Peta Topologi', icon: '◈' },
+    { href: '/logs', label: 'Event Logs', icon: '📋' },
   ];
 
   return (
     <nav className={styles.nav}>
       {/* Brand */}
       <div className={styles.brand}>
-        <div className={styles.brandIcon}>📡</div>
-        <div>
+        <div className={styles.brandIcon}>
+          {/* PERBAIKAN: Path diawali '/' dan tambahkan styling agar tidak luber */}
+          <img src="/logoonly.png" alt="AFF NET Logo" className={styles.logoImg} />
+        </div>
+        <div className={styles.brandText}>
           <div className={styles.brandName}>AFF NET</div>
           <div className={styles.brandSub}>GIS Platform</div>
         </div>

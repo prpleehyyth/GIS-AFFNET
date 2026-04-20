@@ -15,16 +15,43 @@
 }
 
 /* ── Brand ────────────────────────────── */
-.brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.brandIcon {
-  width: 34px; height: 34px;
-  background: var(--blue);
-  border-radius: var(--radius-sm);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* Jarak antara logo dan teks */
 }
-.brandName { font-size: 14px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.03em; line-height: 1; }
-.brandSub  { font-size: 10px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
+
+.brandIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoImg {
+  height: 40px;      /* Atur tinggi logo */
+  width: auto;       /* Biar lebarnya menyesuaikan (tidak gepeng) */
+  object-fit: contain;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.brandName {
+  font-weight: bold;
+  font-size: 1.2rem;
+  line-height: 1;    /* Menghilangkan spacing berlebih */
+  margin-bottom: 2px;
+}
+
+.brandSub {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 
 /* ── Links ────────────────────────────── */
 .links { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; }

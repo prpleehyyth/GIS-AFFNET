@@ -1,10 +1,12 @@
 package controllers
 
 import (
-	"affnet-backend/config"
-	"affnet-backend/models"
 	"net/http"
 	"time"
+
+	"affnet-backend/config"
+	"affnet-backend/models"
+	"affnet-backend/services" // Import folder services yang baru dibuat
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,6 +25,24 @@ func CreateLog(c *gin.Context) {
 		return
 	}
 
+	// ==========================================
+	// 1. FITUR ANTI-SPAM & KUNCI WAKTU (KRITERIA 1)
+	// ==========================================
+	var existingLog models.Log
+	
+	err := config.DB.Where("title = ? AND source = ? AND resolved = false", input.Title, input.Source).First(&existingLog).Error
+
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Log duplikat ditolak, perangkat masih dalam status error.",
+			"data":    existingLog,
+		})
+		return
+	}
+
+	// ==========================================
+	// 2. BUAT LOG BARU JIKA BELUM ADA YANG AKTIF
+	// ==========================================
 	log := models.Log{
 		Severity: models.LogSeverity(input.Severity),
 		Source:   models.LogSource(input.Source),
@@ -33,6 +53,14 @@ func CreateLog(c *gin.Context) {
 	if err := config.DB.Create(&log).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan log"})
 		return
+	}
+
+	// ==========================================
+	// 3. TRIGGER TELEGRAM NOTIFICATION
+	// ==========================================
+	// Menggunakan goroutine agar tidak memblokir respon ke frontend
+	if log.Severity == "critical" {
+		go services.SendTelegramNotification(log)
 	}
 
 	c.JSON(http.StatusCreated, log)
@@ -82,7 +110,6 @@ func ResolveLog(c *gin.Context) {
 }
 
 // ResolveLogByTitle — resolve semua log aktif dengan title tertentu
-// Dipanggil otomatis dari frontend ketika kondisi kembali normal
 func ResolveLogByTitle(c *gin.Context) {
 	var input struct {
 		Title  string `json:"title"  binding:"required"`
@@ -125,4 +152,31 @@ func ClearResolvedLogs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Log resolved berhasil dihapus"})
+}
+
+// TestBulkTelegram — Endpoint sementara untuk ngetes koneksi bot
+func TestBulkTelegram(c *gin.Context) {
+	var logs []models.Log
+
+	// Ambil 5 log terbaru dari database
+	if err := config.DB.Order("created_at desc").Limit(5).Find(&logs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal ambil data log"})
+		return
+	}
+
+	if len(logs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "Database log masih kosong, buat satu log dulu untuk tes"})
+		return
+	}
+
+	// Kirim semua log yang terambil ke Telegram
+	for _, l := range logs {
+		// Kita panggil tanpa goroutine 'go' agar kita bisa melihat jika ada error
+		services.SendTelegramNotification(l)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":          "Proses pengiriman 5 log terbaru ke Telegram selesai",
+		"jumlah_dikirim":   len(logs),
+	})
 }

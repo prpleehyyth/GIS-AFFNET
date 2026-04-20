@@ -15,9 +15,12 @@ export interface Onu {
 export interface Odp {
   id: number;
   name: string;
+  type: 'ODP' | 'ODC'; // Tambahkan ini
   latitude: string;
   longitude: string;
   total_port: number;
+  odc_id: number | null; // Tambahkan ini
+  onus?: any[]; 
 }
 export interface Infra {
   hostid: string;

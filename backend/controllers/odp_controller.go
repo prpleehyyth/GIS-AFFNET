@@ -19,9 +19,10 @@ func CreateOdp(c *gin.Context) {
 }
 
 func GetAllOdp(c *gin.Context) {
-	var odps []models.Odp
-	config.DB.Preload("Onus").Find(&odps)
-	c.JSON(http.StatusOK, odps)
+    var odps []models.Odp
+    // Tambahkan Preload("Odc") supaya data bapaknya ikut narik
+    config.DB.Preload("Onus").Preload("Odc").Find(&odps)
+    c.JSON(http.StatusOK, odps)
 }
 
 // Update ODP

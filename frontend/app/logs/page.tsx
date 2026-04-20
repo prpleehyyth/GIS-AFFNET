@@ -10,6 +10,11 @@ import { LogFilterBar, LogTable } from './components';
 import styles from './logs.module.css';
 
 export default function LogsPage() {
+
+  useEffect(() => {
+    document.title = "Logs | AFF NET GIS";
+  }, []);
+
   const [logs,     setLogs]     = useState<LogEntry[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [severity, setSeverity] = useState('');

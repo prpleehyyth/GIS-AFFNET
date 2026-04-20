@@ -2,11 +2,18 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 // Pastikan path import ini sesuai dengan lokasi file Navbar kamu
-import Navbar from '@/components/Navbar'; 
+import Navbar from '@/components/Navbar';
+
+
 
 export const metadata: Metadata = {
-  title: 'AFF NET GIS',
-  description: 'Sistem Monitoring Jaringan FTTH Berbasis SNMP dan GIS Menggunakan LibreNMS & Zabbix',
+  title: {
+    // %s akan digantikan oleh judul dari masing-masing halaman
+    template: "%s | AFF NET GIS",
+    // Judul default jika halaman tidak menentukan judulnya sendiri
+    default: "AFF NET GIS Platform",
+  },
+  description: "Sistem Informasi Geografis dan Manajemen Jaringan AFF NET",
 };
 
 export default function RootLayout({
@@ -16,16 +23,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body style={{ 
-        margin: 0, 
-        padding: 0, 
+      <body style={{
+        margin: 0,
+        padding: 0,
         backgroundColor: '#f9fafb', // Warna abu-abu sangat muda biar bersih
         fontFamily: 'system-ui, -apple-system, sans-serif',
-        minHeight: '100vh', 
-        display: 'flex', 
-        flexDirection: 'column' 
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
-        
+
         {/* Navbar akan selalu nempel di atas di semua halaman */}
         <Navbar />
 

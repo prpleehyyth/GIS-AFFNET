@@ -27,6 +27,12 @@ export default function OnuPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+
+  useEffect(() => {
+    document.title = "ONU | AFF NET GIS";
+  }, []);
+
+
   // ── Handlers ───────────────────────────────────────────────
   const openEdit = (onu: Onu) => {
     setSelectedOnu(onu);

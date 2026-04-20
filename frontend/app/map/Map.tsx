@@ -21,8 +21,8 @@ import { writeLog, resolveLog } from '@/lib/logService';
 import styles from './map.module.css';
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string;
-const MAP_ID              = process.env.NEXT_PUBLIC_MAP_ID as string;
-const POLL_MS             = 15_000;
+const MAP_ID = process.env.NEXT_PUBLIC_MAP_ID as string;
+const POLL_MS = 15_000;
 
 // ── Inject pulse keyframes once ───────────────────────────────
 if (typeof window !== 'undefined') {
@@ -48,10 +48,14 @@ function Polyline({ path, options }: { path: google.maps.LatLngLiteral[]; option
   const ref = useRef<google.maps.Polyline | null>(null);
 
   useEffect(() => {
+    document.title = "Peta Jaringan | AFF NET GIS";
+  }, []);
+
+  useEffect(() => {
     if (!map) return;
     ref.current = new google.maps.Polyline({ ...options, path, map });
     return () => { ref.current?.setMap(null); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
   useEffect(() => {
@@ -85,18 +89,18 @@ function InfoCard({ children, onClose }: { children: React.ReactNode; onClose: (
 
 // ── Main component ────────────────────────────────────────────
 export default function MapView() {
-  const [isMounted, setIsMounted]   = useState(false);
-  const [isLoading, setIsLoading]   = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [onus,      setOnus]        = useState<Onu[]>([]);
-  const [infras,    setInfras]      = useState<Infra[]>([]);
-  const [odps,      setOdps]        = useState<Odp[]>([]);
-  const [notifs,    setNotifs]      = useState<Notif[]>([]);
-  const [panelOpen, setPanelOpen]   = useState(false);
+  const [onus, setOnus] = useState<Onu[]>([]);
+  const [infras, setInfras] = useState<Infra[]>([]);
+  const [odps, setOdps] = useState<Odp[]>([]);
+  const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
 
-  const seenIds      = useRef<Set<string>>(new Set());
-  const firstSeenAt  = useRef<Map<string, Date>>(new Map());
+  const seenIds = useRef<Set<string>>(new Set());
+  const firstSeenAt = useRef<Map<string, Date>>(new Map());
 
   // activeErrors disimpan di localStorage supaya tidak reset saat navigasi
   const getActiveErrors = () => {
@@ -113,29 +117,29 @@ export default function MapView() {
     try {
       const opts = { credentials: 'include' as RequestCredentials };
       const [onuData, infraData, odpData] = await Promise.all([
-        fetch('http://localhost:8888/api/onu',          opts).then(r => r.json()),
+        fetch('http://localhost:8888/api/onu', opts).then(r => r.json()),
         fetch('http://localhost:8888/api/zabbix-infra', opts)
           .then(r => r.ok ? r.json() : { result: [] })
           .catch(() => ({ result: [] })),
-        fetch('http://localhost:8888/api/odp',          opts).then(r => r.json()),
+        fetch('http://localhost:8888/api/odp', opts).then(r => r.json()),
       ]);
 
-      const allOnus   = Array.isArray(onuData)   ? onuData   : (onuData.result   || []);
-      const allInfras = Array.isArray(infraData)  ? infraData : (infraData.result || []);
-      const allOdps   = Array.isArray(odpData)    ? odpData   : (odpData.result   || []);
+      const allOnus = Array.isArray(onuData) ? onuData : (onuData.result || []);
+      const allInfras = Array.isArray(infraData) ? infraData : (infraData.result || []);
+      const allOdps = Array.isArray(odpData) ? odpData : (odpData.result || []);
 
-      setOnus(allOnus.filter((o: Onu)     => o.latitude && o.longitude));
+      setOnus(allOnus.filter((o: Onu) => o.latitude && o.longitude));
       setInfras(allInfras.filter((i: Infra) => i.inventory?.location_lat && i.inventory?.location_lon));
-      setOdps(allOdps.filter((o: Odp)     => o.latitude && o.longitude));
+      setOdps(allOdps.filter((o: Odp) => o.latitude && o.longitude));
 
       // ── writeLog: ONU kritis ──────────────────────────────
       // Hanya tulis log saat error BARU muncul (belum ada di activeErrors)
       // Resolve saat kondisi kembali normal
-      const prevErrors    = getActiveErrors();
+      const prevErrors = getActiveErrors();
       const currentErrors = new Set<string>();
 
       allOnus.forEach((onu: Onu) => {
-        const rx  = parseFloat(onu.rx_power);
+        const rx = parseFloat(onu.rx_power);
         const key = `onu-crit-${onu.id}`;
         if (rx <= -27) {
           currentErrors.add(key);
@@ -149,13 +153,27 @@ export default function MapView() {
 
       // ── writeLog: Infra down ──────────────────────────────
       allInfras.forEach((infra: Infra) => {
-        const isDown  = infra.interfaces?.some((i: any) => i.available === '2') || false;
-        const isMikro = infra.name.toLowerCase().includes('mikrotik');
-        const key     = `infra-${infra.hostid}`;
+        const isDown = infra.interfaces?.some((i: any) => i.available === '2') || false;
+        const key = `infra-${infra.hostid}`;
+
         if (isDown) {
           currentErrors.add(key);
           if (!prevErrors.has(key)) {
-            writeLog('critical', 'Infra', infra.name, `Perangkat ${isMikro ? 'router' : 'OLT'} tidak merespons`);
+
+            // LOGIKA PENAMAAN BARU:
+            const nameLow = infra.name.toLowerCase();
+            let deviceType = 'Perangkat Jaringan';
+
+            if (nameLow.includes('mikrotik')) {
+              deviceType = 'Router MikroTik';
+            } else if (nameLow.includes('olt')) {
+              deviceType = 'OLT HiOSO';
+            } else {
+              deviceType = `Server (${infra.name})`; // Untuk Zabbix server, dll
+            }
+
+            // Kirim log dengan nama yang benar
+            writeLog('critical', 'Infra', infra.name, `${deviceType} tidak merespons / down`);
           }
         } else if (prevErrors.has(key)) {
           resolveLog(infra.name, 'Infra');
@@ -166,9 +184,9 @@ export default function MapView() {
       saveActiveErrors(currentErrors);
 
       // ── Notif panel (tetap seperti sebelumnya) ────────────
-      const fresh    = buildNotifs(allOnus, allInfras);
+      const fresh = buildNotifs(allOnus, allInfras);
       const freshIds = new Set(fresh.map((n: any) => n.id));
-      const now      = new Date();
+      const now = new Date();
 
       for (const id of firstSeenAt.current.keys()) {
         if (!freshIds.has(id)) firstSeenAt.current.delete(id);
@@ -181,7 +199,7 @@ export default function MapView() {
         const prevMap = new Map(prev.map(n => [n.id, n]));
         return fresh.map((n: any) => ({
           ...n,
-          ts:   firstSeenAt.current.get(n.id) ?? now,
+          ts: firstSeenAt.current.get(n.id) ?? now,
           seen: prevMap.get(n.id)?.seen ?? seenIds.current.has(n.id) ?? false,
         }));
       });
@@ -200,20 +218,20 @@ export default function MapView() {
     return () => clearInterval(t);
   }, [fetchAll, isMounted]);
 
-  const mikrotik  = infras.find(i => i.name.toLowerCase().includes('mikrotik'));
-  const olt       = infras.find(i => i.name.toLowerCase().includes('olt'));
-  const isOltDown = olt?.interfaces?.some(i => i.available === '2')      || false;
+  const mikrotik = infras.find(i => i.name.toLowerCase().includes('mikrotik'));
+  const olt = infras.find(i => i.name.toLowerCase().includes('olt'));
+  const isOltDown = olt?.interfaces?.some(i => i.available === '2') || false;
   const isMikDown = mikrotik?.interfaces?.some(i => i.available === '2') || false;
-  const coreDown  = isOltDown || isMikDown;
-  const unseen    = notifs.filter(n => !n.seen).length;
+  const coreDown = isOltDown || isMikDown;
+  const unseen = notifs.filter(n => !n.seen).length;
 
-  const handleClear   = (id: string) => { seenIds.current.add(id); setNotifs(p => p.filter(n => n.id !== id)); };
+  const handleClear = (id: string) => { seenIds.current.add(id); setNotifs(p => p.filter(n => n.id !== id)); };
   const handleMarkAll = () => setNotifs(p => p.map(n => { seenIds.current.add(n.id); return { ...n, seen: true }; }));
-  const togglePanel   = () => { setPanelOpen(o => !o); if (!panelOpen) handleMarkAll(); };
+  const togglePanel = () => { setPanelOpen(o => !o); if (!panelOpen) handleMarkAll(); };
 
   const selectedInfra = typeof selectedId === 'string' ? infras.find(i => i.hostid === selectedId) : null;
-  const selectedOdp   = typeof selectedId === 'number' ? odps.find(o => o.id === selectedId && odps.some(x => x.id === selectedId)) : null;
-  const selectedOnu   = typeof selectedId === 'number' ? onus.find(o => o.id === selectedId) : null;
+  const selectedOdp = typeof selectedId === 'number' ? odps.find(o => o.id === selectedId && odps.some(x => x.id === selectedId)) : null;
+  const selectedOnu = typeof selectedId === 'number' ? onus.find(o => o.id === selectedId) : null;
 
   if (!isMounted) return null;
 
@@ -259,34 +277,64 @@ export default function MapView() {
             <Polyline
               path={[
                 { lat: parseFloat(mikrotik.inventory.location_lat), lng: parseFloat(mikrotik.inventory.location_lon) },
-                { lat: parseFloat(olt.inventory.location_lat),      lng: parseFloat(olt.inventory.location_lon) },
+                { lat: parseFloat(olt.inventory.location_lat), lng: parseFloat(olt.inventory.location_lon) },
               ]}
-              options={{ strokeColor: coreDown ? '#ef4444' : '#6366f1', strokeWeight: 4, strokeOpacity: 0.85, strokePattern: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '12px' }] }}
+              options={{
+                strokeColor: coreDown ? '#ef4444' : '#6366f1',
+                strokeWeight: 4,
+                strokeOpacity: 0, // Set 0 supaya garis utamanya hilang, ganti sama pola icon
+                icons: [{
+                  icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 },
+                  offset: '0',
+                  repeat: '12px'
+                }]
+              }}
             />
           )}
 
-          {/* Trunk OLT → ODP */}
-          {olt && odps.map(odp => (
-            <Polyline key={`trunk-${odp.id}`}
+          {/* 1. Trunk: OLT → ODC */}
+          {olt && odps.filter(o => o.type === 'ODC').map(odc => (
+            <Polyline key={`trunk-odc-${odc.id}`}
               path={[
                 { lat: parseFloat(olt.inventory.location_lat), lng: parseFloat(olt.inventory.location_lon) },
-                { lat: parseFloat(odp.latitude),               lng: parseFloat(odp.longitude) },
+                { lat: parseFloat(odc.latitude), lng: parseFloat(odc.longitude) },
               ]}
-              options={{ strokeColor: coreDown ? '#ef4444' : '#3b82f6', strokeWeight: 3, strokeOpacity: 0.7 }}
+              options={{ strokeColor: coreDown ? '#ef4444' : '#3b82f6', strokeWeight: 4, strokeOpacity: 0.9 }}
             />
           ))}
+
+          {/* 2. Distribusi: ODC → ODP */}
+          {odps.filter(o => o.type === 'ODP' && o.odc_id).map(odp => {
+            // Cari koordinat ODC sebagai parent
+            const parentOdc = odps.find(x => x.id === odp.odc_id);
+            if (!parentOdc) return null;
+
+            return (
+              <Polyline key={`dist-${odp.id}`}
+                path={[
+                  { lat: parseFloat(parentOdc.latitude), lng: parseFloat(parentOdc.longitude) },
+                  { lat: parseFloat(odp.latitude), lng: parseFloat(odp.longitude) },
+                ]}
+                options={{
+                  strokeColor: '#10b981',
+                  strokeWeight: 3,
+                  strokeOpacity: 0.8
+                }}
+              />
+            );
+          })}
 
           {/* Drop ODP → ONU */}
           {onus.filter(o => o.odp_id).map(onu => {
             const parent = odps.find(o => o.id === onu.odp_id);
             if (!parent) return null;
-            const rx    = parseFloat(onu.rx_power);
+            const rx = parseFloat(onu.rx_power);
             const color = rx <= -27 ? '#ef4444' : rx <= -25 ? '#f59e0b' : '#22c55e';
             return (
               <Polyline key={`drop-${onu.id}`}
                 path={[
                   { lat: parseFloat(parent.latitude), lng: parseFloat(parent.longitude) },
-                  { lat: parseFloat(onu.latitude),    lng: parseFloat(onu.longitude) },
+                  { lat: parseFloat(onu.latitude), lng: parseFloat(onu.longitude) },
                 ]}
                 options={{ strokeColor: color, strokeWeight: 2, strokeOpacity: 0.8 }}
               />
@@ -295,7 +343,7 @@ export default function MapView() {
 
           {/* Marker Infra */}
           {infras.map(infra => {
-            const isDown  = infra.interfaces?.some(i => i.available === '2') || false;
+            const isDown = infra.interfaces?.some(i => i.available === '2') || false;
             const isMikro = infra.name.toLowerCase().includes('mikrotik');
             return (
               <AdvancedMarker
@@ -325,10 +373,10 @@ export default function MapView() {
 
           {/* Marker ONU */}
           {onus.map(onu => {
-            const rx         = parseFloat(onu.rx_power);
+            const rx = parseFloat(onu.rx_power);
             const isCritical = rx <= -27;
-            const isWarning  = rx <= -25 && !isCritical;
-            const level      = isCritical ? 'critical' : isWarning ? 'warning' : 'ok';
+            const isWarning = rx <= -25 && !isCritical;
+            const level = isCritical ? 'critical' : isWarning ? 'warning' : 'ok';
             return (
               <AdvancedMarker
                 key={`onu-${onu.id}`}
@@ -342,7 +390,7 @@ export default function MapView() {
 
           {/* InfoWindow: Infra */}
           {selectedInfra && (() => {
-            const isDown  = selectedInfra.interfaces?.some(i => i.available === '2') || false;
+            const isDown = selectedInfra.interfaces?.some(i => i.available === '2') || false;
             const isMikro = selectedInfra.name.toLowerCase().includes('mikrotik');
             return (
               <InfoWindow
@@ -376,7 +424,7 @@ export default function MapView() {
           {selectedOdp && (() => {
             const terisi = onus.filter(o => o.odp_id === selectedOdp.id).length;
             const isFull = terisi >= selectedOdp.total_port;
-            const pct    = selectedOdp.total_port > 0 ? Math.round((terisi / selectedOdp.total_port) * 100) : 0;
+            const pct = selectedOdp.total_port > 0 ? Math.round((terisi / selectedOdp.total_port) * 100) : 0;
             return (
               <InfoWindow
                 position={{ lat: parseFloat(selectedOdp.latitude), lng: parseFloat(selectedOdp.longitude) }}
@@ -412,10 +460,10 @@ export default function MapView() {
 
           {/* InfoWindow: ONU */}
           {selectedOnu && (() => {
-            const rx         = parseFloat(selectedOnu.rx_power);
+            const rx = parseFloat(selectedOnu.rx_power);
             const isCritical = rx <= -27;
-            const isWarning  = rx <= -25 && !isCritical;
-            const rxColor    = isCritical ? '#ef4444' : isWarning ? '#d97706' : '#16a34a';
+            const isWarning = rx <= -25 && !isCritical;
+            const rxColor = isCritical ? '#ef4444' : isWarning ? '#d97706' : '#16a34a';
             return (
               <InfoWindow
                 position={{ lat: parseFloat(selectedOnu.latitude), lng: parseFloat(selectedOnu.longitude) }}
