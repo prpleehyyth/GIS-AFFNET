@@ -52,6 +52,7 @@ func main() {
             protected.DELETE("/logs/resolved", controllers.ClearResolvedLogs)
 
             protected.GET("/test-notif", controllers.TestBulkTelegram)
+            protected.GET("/pppoe-active", controllers.GetPPPoEActive)
         }
     }
 
