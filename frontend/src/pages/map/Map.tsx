@@ -12,7 +12,7 @@ import {
   buildNotifs,
 } from './Components';
 import { writeLog, resolveLog } from '@/lib/logService';
-import styles from './map.module.css';
+import styles from './Map.module.css';
 
 const POLL_MS = 15_000;
 
