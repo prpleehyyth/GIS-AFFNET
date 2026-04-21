@@ -4,7 +4,6 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { renderToString } from 'react-dom/server';
 
-import NotifPanel, { Notif } from './NotifPanel';
 import {
   Onu, Odp, Infra,
   OltIcon, MikrotikIcon, OdpIcon, OnuIcon,
@@ -70,7 +69,6 @@ export default function MapView() {
   const [onus, setOnus] = useState<Onu[]>([]);
   const [infras, setInfras] = useState<Infra[]>([]);
   const [odps, setOdps] = useState<Odp[]>([]);
-  const [notifs, setNotifs] = useState<Notif[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
 
   const seenIds = useRef<Set<string>>(new Set());
@@ -158,15 +156,6 @@ export default function MapView() {
         if (!firstSeenAt.current.has(n.id)) firstSeenAt.current.set(n.id, now);
       }
 
-      setNotifs(prev => {
-        const prevMap = new Map(prev.map(n => [n.id, n]));
-        return fresh.map((n: any) => ({
-          ...n,
-          ts: firstSeenAt.current.get(n.id) ?? now,
-          seen: prevMap.get(n.id)?.seen ?? seenIds.current.has(n.id) ?? false,
-        }));
-      });
-
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {
@@ -186,11 +175,8 @@ export default function MapView() {
   const isOltDown = olt?.interfaces?.some(i => i.available === '2') || false;
   const isMikDown = mikrotik?.interfaces?.some(i => i.available === '2') || false;
   const coreDown = isOltDown || isMikDown;
-  const unseen = notifs.filter(n => !n.seen).length;
+ 
 
-  const handleClear = (id: string) => { seenIds.current.add(id); setNotifs(p => p.filter(n => n.id !== id)); };
-  const handleMarkAll = () => setNotifs(p => p.map(n => { seenIds.current.add(n.id); return { ...n, seen: true }; }));
-  const togglePanel = () => { setPanelOpen(o => !o); if (!panelOpen) handleMarkAll(); };
 
   if (!isMounted) return null;
 
@@ -209,16 +195,6 @@ export default function MapView() {
         </div>
       )}
 
-      <button
-        className={`${styles.bellBtn} ${panelOpen ? styles.bellBtnShifted : ''}`}
-        onClick={togglePanel}
-        style={{ zIndex: 1000 }} // Ensure it's above leaflet map
-      >
-        <span>🔔</span>
-        {unseen > 0 && !panelOpen && (
-          <span className={styles.bellBadge}>{unseen > 9 ? '9+' : unseen}</span>
-        )}
-      </button>
 
       <MapContainer
         center={[-7.5361, 112.4368]}
@@ -411,11 +387,6 @@ export default function MapView() {
           );
         })}
       </MapContainer>
-
-      {/* Notif Panel */}
-      {panelOpen && (
-        <NotifPanel notifs={notifs} onClear={handleClear} onMarkAll={handleMarkAll} />
-      )}
     </div>
   );
 }
