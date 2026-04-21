@@ -1,6 +1,5 @@
 // lib/logService.ts
-
-const BASE = 'http://localhost:8888/api';
+const BASE = '/api';
 const OPTS = { credentials: 'include' as RequestCredentials };
 
 export type LogSeverity = 'critical' | 'warning' | 'info';

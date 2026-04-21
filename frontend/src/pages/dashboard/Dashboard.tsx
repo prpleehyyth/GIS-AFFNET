@@ -22,12 +22,13 @@ export default function Dashboard() {
 
     document.title = "Dashboard | AFF NET GIS";
 
-    Promise.all([
-      fetch('http://localhost:8888/api/onu', { credentials: 'include' }).then(r => r.json()),
-      fetch('http://localhost:8888/api/zabbix-infra', { credentials: 'include' })
+    // ✅ UBAH KETIGA FETCH MENJADI RELATIVE PATH:
+Promise.all([
+      fetch('/api/onu', { credentials: 'include' }).then(r => r.json()),
+      fetch('/api/zabbix-infra', { credentials: 'include' })
         .then(r => { if (!r.ok) { setInfraError(true); return { result: [] }; } return r.json(); })
         .catch(() => { setInfraError(true); return { result: [] }; }),
-      fetch('http://localhost:8888/api/odp', { credentials: 'include' }).then(r => r.json()),
+      fetch('/api/odp', { credentials: 'include' }).then(r => r.json()),
     ]).then(([onuData, infraData, odpData]) => {
       const rawInfras = Array.isArray(infraData) ? infraData : (infraData.result || []);
       const rawOdps = Array.isArray(odpData) ? odpData : (odpData.result || []);
