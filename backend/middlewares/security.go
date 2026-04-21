@@ -16,7 +16,10 @@ var jwtKey = []byte(os.Getenv("JWT_SECRET"))
 // 1. Middleware untuk CORS
 func CORSMiddleware() gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8888"},
+		// GANTI MENJADI INI:
+        AllowOriginFunc: func(origin string) bool {
+            return true // Mengizinkan semua IP / Domain masuk (Dinamis)
+        },
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
 		AllowCredentials: true,
