@@ -34,16 +34,16 @@ func extractMacAddress(input string) string {
 	return strings.ToUpper(match)
 }
 
-// Helper 2: Jembatan Sakti! Hapus titik/titik dua biar MAC Zabbix & MikroTik gampang dicocokin (AABBCCDDEEFF)
+// Helper 2: Hapus semua titik/titik dua/strip biar MAC bersih (AABBCCDDEEFF)
 func normalizeMac(mac string) string {
 	re := regexp.MustCompile(`[^a-fA-F0-9]`)
 	return strings.ToUpper(re.ReplaceAllString(mac, ""))
 }
 
-// SyncOnuFromZabbix: Menyedot Zabbix + MikroTik, lalu simpan ke Tabel Database
+// SyncOnuFromZabbix: Menyedot Zabbix + MikroTik dengan fitur FUZZY MATCH MAC
 func SyncOnuFromZabbix(c *gin.Context) {
 	// ================================================================
-	// 1. TARIK DATA KAMUS DARI MIKROTIK (PPPoE ACTIVE) - DENGAN PROTEKSI
+	// 1. TARIK DATA KAMUS DARI MIKROTIK (PPPoE ACTIVE)
 	// ================================================================
 	mkIp := os.Getenv("MIKROTIK_IP")
 	mkUser := os.Getenv("MIKROTIK_USER")
@@ -54,23 +54,22 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	client, errMk := routeros.Dial(mkIp, mkUser, mkPass)
 	if errMk == nil {
 		defer client.Close()
+		// Mengambil data user yang sedang online
 		reply, errRun := client.Run("/ppp/active/print")
 		if errRun == nil {
 			for _, re := range reply.Re {
 				if callerID, ok := re.Map["caller-id"]; ok {
-					// Simpan ke kamus pakai MAC yang udah "ditelanjangi"
 					cleanMac := normalizeMac(callerID)
 					macToCustomer[cleanMac] = re.Map["name"]
 				}
 			}
 		}
 	} else {
-		// Jangan crash kalau VPN MikroTik lagi putus, cuma print log aja
 		fmt.Println("⚠️ Peringatan: Gagal konek ke MikroTik. Sinkronisasi lanjut tanpa update nama.", errMk)
 	}
 
 	// ================================================================
-	// 2. TARIK DATA REDAMAN DARI ZABBIX - DENGAN PROTEKSI 502
+	// 2. TARIK DATA REDAMAN DARI ZABBIX (Anti 502 Bad Gateway)
 	// ================================================================
 	token, err := getZabbixAuthToken()
 	if err != nil {
@@ -93,9 +92,8 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	jb, _ := json.Marshal(zabbixPayload)
 	resp, errZ := http.Post(ZabbixURL, "application/json-rpc", bytes.NewBuffer(jb))
 	
-	// PROTEKSI ANTI 502: Cek apakah HTTP Request ke Zabbix berhasil
 	if errZ != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Zabbix tidak merespon (Reachability Error)", "detail": errZ.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Zabbix tidak merespon", "detail": errZ.Error()})
 		return
 	}
 	defer resp.Body.Close()
@@ -116,32 +114,44 @@ func SyncOnuFromZabbix(c *gin.Context) {
 		} `json:"result"`
 	}
 
-	// PROTEKSI ANTI 502: Pastikan JSON bisa di-parsing
 	if errUnmarshal := json.Unmarshal(itemBody, &zabbixData); errUnmarshal != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal parsing JSON Zabbix", "detail": errUnmarshal.Error()})
 		return
 	}
 
 	// ================================================================
-	// 3. MERGING & INSERT/UPDATE KE TABEL DATABASE `onus`
+	// 3. MERGING DENGAN FUZZY MATCH & INSERT/UPDATE KE TABEL `onus`
 	// ================================================================
 	countNew := 0
 	countUpdate := 0
 	batasKritis := -25.0
 
 	for _, item := range zabbixData.Result {
-		// 1. Ekstrak MAC versi baku untuk disimpan ke DB (AA:BB:CC...)
+		// 1. Ekstrak MAC baku untuk Database (Contoh: C8:3A:35:3C:AA:B8)
 		dbMac := extractMacAddress(item.Name)
 		if dbMac == "" {
 			continue
 		}
 
-		// 2. Normalisasi MAC Zabbix (AABBCC...) untuk dicari di Kamus MikroTik
+		// 2. Normalisasi MAC Zabbix (Contoh: C83A353CAAB8)
 		searchMac := normalizeMac(dbMac)
-
 		customerName := ""
+
+		// --- LOGIKA FUZZY MATCH SAKTI ---
+		// A. Coba Exact Match (12 Digit Sama Persis)
 		if nama, ada := macToCustomer[searchMac]; ada {
 			customerName = nama
+		} else {
+			// B. Coba Fuzzy Match (11 Digit Sama, Beda Ujungnya Doang)
+			for mkMac, mkName := range macToCustomer {
+				if len(searchMac) == 12 && len(mkMac) == 12 {
+					if searchMac[:11] == mkMac[:11] {
+						customerName = mkName
+						fmt.Printf("💡 Fuzzy Match: %s (Zabbix) disamakan dengan %s (MikroTik) -> %s\n", searchMac, mkMac, mkName)
+						break
+					}
+				}
+			}
 		}
 
 		// --- LOGIKA NOTIFIKASI CRITICAL (TELEGRAM) ---
@@ -169,7 +179,7 @@ func SyncOnuFromZabbix(c *gin.Context) {
 					go services.SendTelegramNotification(newLog)
 				}
 			} else {
-				// Auto-resolve jika sinyal sudah membaik
+				// Auto-resolve jika sinyal membaik
 				config.DB.Model(&models.Log{}).
 					Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
 					Updates(map[string]interface{}{
@@ -179,26 +189,24 @@ func SyncOnuFromZabbix(c *gin.Context) {
 			}
 		}
 
-		// --- LOGIKA SAVE KE DATABASE (Tabel `onus`) ---
+		// --- LOGIKA SAVE KE DATABASE ---
 		var existingOnu models.Onu
 		result := config.DB.Where("mac_address = ?", dbMac).First(&existingOnu)
 
 		if result.RowsAffected > 0 {
-			// UPDATE DATA LAMA
+			// UPDATE
 			updateData := map[string]interface{}{
 				"rx_power": item.Lastvalue,
 				"status":   "Online",
 			}
-			
-			// Trik Pintar: Jangan timpa nama jadi kosong kalau pelanggan cuma mati lampu bentar
+			// Jangan timpa nama jadi kosong kalau PPPoE lg putus bentar
 			if customerName != "" {
 				updateData["customer"] = customerName
 			}
-
 			config.DB.Model(&existingOnu).Updates(updateData)
 			countUpdate++
 		} else {
-			// INSERT DATA BARU
+			// INSERT
 			newOnu := models.Onu{
 				MacAddress: dbMac,
 				RxPower:    item.Lastvalue,
@@ -211,10 +219,10 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	}
 
 	// ================================================================
-	// 4. RESPONSE SELESAI
+	// 4. RESPONSE
 	// ================================================================
 	c.JSON(http.StatusOK, gin.H{
-		"message":       "Sinkronisasi Data Zabbix & MikroTik selesai",
+		"message":       "Sinkronisasi Data Selesai",
 		"total_ditarik": len(zabbixData.Result),
 		"onu_baru":      countNew,
 		"onu_diupdate":  countUpdate,
