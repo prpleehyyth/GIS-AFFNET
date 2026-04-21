@@ -20,33 +20,35 @@ import (
 	"gopkg.in/routeros.v2"
 )
 
-// Fungsi untuk mengekstrak dan memformat MAC Address dari nama item Zabbix
+// Helper 1: Ekstrak MAC baku (AA:BB:CC:DD:EE:FF) dari text Zabbix buat disimpen di DB
 func extractMacAddress(input string) string {
-	re := regexp.MustCompile(`([0-9A-Fa-f]{12})`)
+	re := regexp.MustCompile(`([0-9A-Fa-f]{12})|([0-9A-Fa-f]{2}[:\-][0-9A-Fa-f]{2}[:\-][0-9A-Fa-f]{2}[:\-][0-9A-Fa-f]{2}[:\-][0-9A-Fa-f]{2}[:\-][0-9A-Fa-f]{2})`)
 	match := re.FindString(input)
-
 	if match == "" {
 		return ""
 	}
+	clean := regexp.MustCompile(`[^a-fA-F0-9]`).ReplaceAllString(match, "")
+	if len(clean) == 12 {
+		return strings.ToUpper(fmt.Sprintf("%s:%s:%s:%s:%s:%s", clean[0:2], clean[2:4], clean[4:6], clean[6:8], clean[8:10], clean[10:12]))
+	}
+	return strings.ToUpper(match)
+}
 
-	formattedMac := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
-		match[0:2], match[2:4], match[4:6],
-		match[6:8], match[8:10], match[10:12],
-	)
-
-	return strings.ToUpper(formattedMac)
+// Helper 2: Jembatan Sakti! Hapus titik/titik dua biar MAC Zabbix & MikroTik gampang dicocokin (AABBCCDDEEFF)
+func normalizeMac(mac string) string {
+	re := regexp.MustCompile(`[^a-fA-F0-9]`)
+	return strings.ToUpper(re.ReplaceAllString(mac, ""))
 }
 
 // SyncOnuFromZabbix: Menyedot Zabbix + MikroTik, lalu simpan ke Tabel Database
 func SyncOnuFromZabbix(c *gin.Context) {
 	// ================================================================
-	// 1. TARIK DATA KAMUS DARI MIKROTIK (PPPoE ACTIVE)
+	// 1. TARIK DATA KAMUS DARI MIKROTIK (PPPoE ACTIVE) - DENGAN PROTEKSI
 	// ================================================================
 	mkIp := os.Getenv("MIKROTIK_IP")
 	mkUser := os.Getenv("MIKROTIK_USER")
 	mkPass := os.Getenv("MIKROTIK_PASS")
 
-	// Siapkan buku kamus: MAC Address -> Nama Customer
 	macToCustomer := make(map[string]string)
 
 	client, errMk := routeros.Dial(mkIp, mkUser, mkPass)
@@ -55,22 +57,24 @@ func SyncOnuFromZabbix(c *gin.Context) {
 		reply, errRun := client.Run("/ppp/active/print")
 		if errRun == nil {
 			for _, re := range reply.Re {
-				// Ambil MAC dan pastikan huruf besar
-				mac := strings.ToUpper(re.Map["caller-id"])
-				nama := re.Map["name"]
-				macToCustomer[mac] = nama
+				if callerID, ok := re.Map["caller-id"]; ok {
+					// Simpan ke kamus pakai MAC yang udah "ditelanjangi"
+					cleanMac := normalizeMac(callerID)
+					macToCustomer[cleanMac] = re.Map["name"]
+				}
 			}
 		}
 	} else {
-		fmt.Println("⚠️ Peringatan: Gagal konek ke MikroTik saat sinkronisasi:", errMk)
+		// Jangan crash kalau VPN MikroTik lagi putus, cuma print log aja
+		fmt.Println("⚠️ Peringatan: Gagal konek ke MikroTik. Sinkronisasi lanjut tanpa update nama.", errMk)
 	}
 
 	// ================================================================
-	// 2. TARIK DATA REDAMAN DARI ZABBIX
+	// 2. TARIK DATA REDAMAN DARI ZABBIX - DENGAN PROTEKSI 502
 	// ================================================================
-	token, err := getZabbixAuthToken() // Pastikan fungsi ini ada di file yg sama
+	token, err := getZabbixAuthToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal login ke Zabbix"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal login ke Zabbix", "detail": err.Error()})
 		return
 	}
 
@@ -87,10 +91,20 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	}
 
 	jb, _ := json.Marshal(zabbixPayload)
-	resp, _ := http.Post(ZabbixURL, "application/json-rpc", bytes.NewBuffer(jb))
+	resp, errZ := http.Post(ZabbixURL, "application/json-rpc", bytes.NewBuffer(jb))
+	
+	// PROTEKSI ANTI 502: Cek apakah HTTP Request ke Zabbix berhasil
+	if errZ != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Zabbix tidak merespon (Reachability Error)", "detail": errZ.Error()})
+		return
+	}
 	defer resp.Body.Close()
 
-	itemBody, _ := io.ReadAll(resp.Body)
+	itemBody, errRead := io.ReadAll(resp.Body)
+	if errRead != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca response Zabbix"})
+		return
+	}
 
 	var zabbixData struct {
 		Result []struct {
@@ -101,79 +115,95 @@ func SyncOnuFromZabbix(c *gin.Context) {
 			Units     string `json:"units"`
 		} `json:"result"`
 	}
-	json.Unmarshal(itemBody, &zabbixData)
+
+	// PROTEKSI ANTI 502: Pastikan JSON bisa di-parsing
+	if errUnmarshal := json.Unmarshal(itemBody, &zabbixData); errUnmarshal != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal parsing JSON Zabbix", "detail": errUnmarshal.Error()})
+		return
+	}
 
 	// ================================================================
 	// 3. MERGING & INSERT/UPDATE KE TABEL DATABASE `onus`
 	// ================================================================
 	countNew := 0
 	countUpdate := 0
-	batasKritis := -25.0 
+	batasKritis := -25.0
 
 	for _, item := range zabbixData.Result {
-		mac := extractMacAddress(item.Name)
-		if mac == "" {
+		// 1. Ekstrak MAC versi baku untuk disimpan ke DB (AA:BB:CC...)
+		dbMac := extractMacAddress(item.Name)
+		if dbMac == "" {
 			continue
 		}
 
-		// Cari nama customer dari MikroTik berdasarkan MAC dari Zabbix
-		customerName := "" // Default kosong sesuai struct awalmu
-		if nama, ada := macToCustomer[mac]; ada {
+		// 2. Normalisasi MAC Zabbix (AABBCC...) untuk dicari di Kamus MikroTik
+		searchMac := normalizeMac(dbMac)
+
+		customerName := ""
+		if nama, ada := macToCustomer[searchMac]; ada {
 			customerName = nama
 		}
 
 		// --- LOGIKA NOTIFIKASI CRITICAL (TELEGRAM) ---
-		rxPowerFloat, _ := strconv.ParseFloat(item.Lastvalue, 64)
-		isCritical := rxPowerFloat < batasKritis 
+		rxPowerFloat, errParse := strconv.ParseFloat(item.Lastvalue, 64)
+		if errParse == nil {
+			isCritical := rxPowerFloat < batasKritis
 
-		if isCritical {
-			var existingLog models.Log
-			errLog := config.DB.Where("title = ? AND source = ? AND resolved = false", mac, "ONU").First(&existingLog).Error
+			if isCritical {
+				var existingLog models.Log
+				errLog := config.DB.Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").First(&existingLog).Error
 
-			if errLog != nil {
-				pesanNotif := fmt.Sprintf("Sinyal kritis: %s dBm.", item.Lastvalue)
-				if customerName != "" {
-					pesanNotif += fmt.Sprintf(" Pelanggan: %s", customerName)
+				if errLog != nil {
+					pesanNotif := fmt.Sprintf("Sinyal kritis: %s dBm.", item.Lastvalue)
+					if customerName != "" {
+						pesanNotif += fmt.Sprintf(" Pelanggan: %s", customerName)
+					}
+
+					newLog := models.Log{
+						Severity: "critical",
+						Source:   "ONU",
+						Title:    dbMac,
+						Message:  pesanNotif,
+					}
+					config.DB.Create(&newLog)
+					go services.SendTelegramNotification(newLog)
 				}
-
-				newLog := models.Log{
-					Severity: "critical", 
-					Source:   "ONU",      
-					Title:    mac,
-					Message:  pesanNotif,
-				}
-				config.DB.Create(&newLog)
-				go services.SendTelegramNotification(newLog)
+			} else {
+				// Auto-resolve jika sinyal sudah membaik
+				config.DB.Model(&models.Log{}).
+					Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
+					Updates(map[string]interface{}{
+						"resolved":    true,
+						"resolved_at": time.Now(),
+					})
 			}
-		} else {
-			// Auto-resolve jika sinyal sudah membaik
-			config.DB.Model(&models.Log{}).
-				Where("title = ? AND source = ? AND resolved = false", mac, "ONU").
-				Updates(map[string]interface{}{
-					"resolved":    true,
-					"resolved_at": time.Now(), 
-				})
 		}
 
 		// --- LOGIKA SAVE KE DATABASE (Tabel `onus`) ---
 		var existingOnu models.Onu
-		result := config.DB.Where("mac_address = ?", mac).First(&existingOnu)
+		result := config.DB.Where("mac_address = ?", dbMac).First(&existingOnu)
 
 		if result.RowsAffected > 0 {
-			// Jika MAC sudah ada di DB -> Update Data
-			config.DB.Model(&existingOnu).Updates(map[string]interface{}{
+			// UPDATE DATA LAMA
+			updateData := map[string]interface{}{
 				"rx_power": item.Lastvalue,
 				"status":   "Online",
-				"customer": customerName, // Update customer dari MikroTik
-			})
+			}
+			
+			// Trik Pintar: Jangan timpa nama jadi kosong kalau pelanggan cuma mati lampu bentar
+			if customerName != "" {
+				updateData["customer"] = customerName
+			}
+
+			config.DB.Model(&existingOnu).Updates(updateData)
 			countUpdate++
 		} else {
-			// Jika MAC belum ada di DB -> Insert Baru
+			// INSERT DATA BARU
 			newOnu := models.Onu{
-				MacAddress: mac,
+				MacAddress: dbMac,
 				RxPower:    item.Lastvalue,
 				Status:     "Online",
-				Customer:   customerName, // Isi customer dari MikroTik
+				Customer:   customerName,
 			}
 			config.DB.Create(&newOnu)
 			countNew++
