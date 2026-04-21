@@ -1,6 +1,6 @@
 
 
-import { Notif, Severity } from './NotifPanel';
+
 
 // ── Types ─────────────────────────────────────────────────────
 export interface Onu {
@@ -190,40 +190,3 @@ export const pp: Record<string, React.CSSProperties> = {
   val:   { fontSize: 12, fontWeight: 600, color: '#111827' },
   badge: { fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 },
 };
-
-// ── Build notifs ──────────────────────────────────────────────
-// buildNotifs hanya deteksi kondisi error — timestamp dihandle di Map.tsx
-// supaya ts tidak berubah selama error masih berlangsung
-export function buildNotifs(onus: Onu[], infras: Infra[]): Omit<Notif, 'seen' | 'ts'>[] {
-  const list: Omit<Notif, 'seen' | 'ts'>[] = [];
-
-  infras.forEach(infra => {
-    if (infra.interfaces?.some(i => i.available === '2')) {
-      const isMikro = infra.name.toLowerCase().includes('mikrotik');
-      list.push({
-        id: `infra-${infra.hostid}`, severity: 'critical' as Severity,
-        title: `${infra.name} DOWN`,
-        desc: `Perangkat ${isMikro ? 'router' : 'OLT'} tidak merespons`,
-      });
-    }
-  });
-
-  onus.forEach(onu => {
-    const rx = parseFloat(onu.rx_power);
-    if (rx <= -27) {
-      list.push({
-        id: `onu-crit-${onu.id}`, severity: 'critical' as Severity,
-        title: onu.customer || onu.mac_address,
-        desc: `Sinyal kritis: ${onu.rx_power} dBm`,
-      });
-    } else if (!onu.latitude || !onu.longitude) {
-      list.push({
-        id: `onu-noloc-${onu.id}`, severity: 'info' as Severity,
-        title: onu.customer || onu.mac_address,
-        desc: 'ONU belum memiliki koordinat lokasi',
-      });
-    }
-  });
-
-  return list;
-}

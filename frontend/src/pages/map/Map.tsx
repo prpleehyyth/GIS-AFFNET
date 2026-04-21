@@ -8,7 +8,6 @@ import {
   Onu, Odp, Infra,
   OltIcon, MikrotikIcon, OdpIcon, OnuIcon,
   SignalBars, StatusBadge, pp,
-  buildNotifs,
 } from './Components';
 import { writeLog, resolveLog } from '@/lib/logService';
 import styles from './Map.module.css';
@@ -143,18 +142,6 @@ export default function MapView() {
       });
 
       saveActiveErrors(currentErrors);
-
-      // ── Notif panel ────────────
-      const fresh = buildNotifs(allOnus, allInfras);
-      const freshIds = new Set(fresh.map((n: any) => n.id));
-      const now = new Date();
-
-      for (const id of firstSeenAt.current.keys()) {
-        if (!freshIds.has(id)) firstSeenAt.current.delete(id);
-      }
-      for (const n of fresh) {
-        if (!firstSeenAt.current.has(n.id)) firstSeenAt.current.set(n.id, now);
-      }
 
     } catch (e) {
       console.error('Fetch error:', e);

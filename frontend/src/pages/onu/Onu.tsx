@@ -3,8 +3,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { Onu, Odp, OnuForm, FilterMode, OnuTable, OnuModal } from './components';
 import styles from './onu.module.css';
 
-const ONU_URL = 'http://localhost:8888/api/onu';
-const ODP_URL = 'http://localhost:8888/api/odp';
+const ONU_URL = '/api/onu';
+const ODP_URL = '/api/odp';
 
 export default function OnuPage() {
   const [onus,        setOnus]        = useState<Onu[]>([]);

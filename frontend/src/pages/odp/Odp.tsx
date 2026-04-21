@@ -4,7 +4,7 @@ import { Odp, OdpForm, OdpTable, OdpModal, DeleteConfirmModal } from './componen
 import { writeLog } from '@/lib/logService';
 import styles from './odp.module.css';
 
-const BASE_URL = 'http://localhost:8888/api/odp';
+const BASE_URL = '/api/odp';
 const EMPTY: OdpForm = { name: '', type: 'ODP', latitude: '', longitude: '', total_port: 8, odc_id: null };
 
 export default function OdpPage() {
