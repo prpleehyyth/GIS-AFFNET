@@ -1,11 +1,11 @@
 package controllers
 
 import (
-	"net/http"
-	"time"
-	"os"
 	"affnet-backend/config" // Pastikan import ini sesuai dengan nama module go.mod kamu
 	"affnet-backend/models" // Pastikan import ini sesuai dengan nama module go.mod kamu
+	"net/http"
+	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -81,7 +81,7 @@ func Login(c *gin.Context) {
 	// 8. Kirim Token JWT via HttpOnly Cookie
 	// Format: c.SetCookie(name, value, maxAge, path, domain, secure, httpOnly)
 	// maxAge 86400 detik = 24 jam
-	c.SetCookie("token", tokenString, 86400, "/", "localhost", false, true)
+	c.SetCookie("token", tokenString, 86400, "/", "", false, true)
 
 	// 9. Kirim response JSON sukses
 	c.JSON(http.StatusOK, gin.H{
