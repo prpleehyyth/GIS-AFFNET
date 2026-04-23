@@ -3,10 +3,11 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { renderToString } from 'react-dom/server';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 
 import {
   Onu, Odp, Infra,
-  OltIcon, MikrotikIcon, OdpIcon, OnuIcon,
+  OltIcon, MikrotikIcon, OdcIcon, OdpIcon, OnuIcon,
   SignalBars, StatusBadge, pp,
 } from './Components';
 import { writeLog, resolveLog } from '@/lib/logService';
@@ -36,7 +37,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// Helper to create L.divIcon from React component
+// ── Helper: create L.divIcon from React component ─────────────
 const createIcon = (comp: React.ReactElement, size: [number, number]) => {
   return L.divIcon({
     html: renderToString(comp),
@@ -47,13 +48,49 @@ const createIcon = (comp: React.ReactElement, size: [number, number]) => {
   });
 };
 
+// ── Helper: custom cluster icon ───────────────────────────────
+const createCoreClusterIcon = (cluster: any) => {
+  const count = cluster.getChildCount();
+  
+  // Kita bikin desain icon server core yang elegan
+  return L.divIcon({
+    html: renderToString(
+      <div style={{
+        width: 44,
+        height: 44,
+        background: '#1E293B', // Warna dark slate yang elegan
+        color: '#fff',
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 700,
+        fontSize: 14,
+        border: '3px solid #38BDF8', // Border biru terang khas networking
+        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+        position: 'relative'
+      }}>
+        {/* Ikon kecil untuk nandain ini rak server */}
+        <span style={{ position: 'absolute', top: -8, fontSize: 16 }}>🖥️</span>
+        {count}
+      </div>
+    ),
+    className: 'custom-leaflet-icon',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+};
+
 // ── Popup card ────────────────────────────────────────────────
 function InfoCard({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans',sans-serif",
-      background: '#fff', borderRadius: 12,
-      minWidth: 200, position: 'relative',
+      background: '#fff',
+      borderRadius: 12,
+      minWidth: 200,
+      position: 'relative',
     }}>
       {children}
     </div>
@@ -62,18 +99,12 @@ function InfoCard({ children }: { children: React.ReactNode }) {
 
 // ── Main component ────────────────────────────────────────────
 export default function MapView() {
-  const [isMounted, setIsMounted] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted]   = useState(false);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [onus,   setOnus]           = useState<Onu[]>([]);
+  const [infras, setInfras]         = useState<Infra[]>([]);
+  const [odps,   setOdps]           = useState<Odp[]>([]);
 
-  const [onus, setOnus] = useState<Onu[]>([]);
-  const [infras, setInfras] = useState<Infra[]>([]);
-  const [odps, setOdps] = useState<Odp[]>([]);
-  const [panelOpen, setPanelOpen] = useState(false);
-
-  const seenIds = useRef<Set<string>>(new Set());
-  const firstSeenAt = useRef<Map<string, Date>>(new Map());
-
-  // activeErrors disimpan di localStorage supaya tidak reset saat navigasi
   const getActiveErrors = () => {
     try { return new Set<string>(JSON.parse(localStorage.getItem('ae') || '[]')); }
     catch { return new Set<string>(); }
@@ -88,32 +119,31 @@ export default function MapView() {
     try {
       const opts = { credentials: 'include' as RequestCredentials };
       const [onuData, infraData, odpData] = await Promise.all([
-        fetch('/api/onu', opts).then(r => r.json()),
-        fetch('/api/zabbix-infra', opts)
-          .then(r => r.ok ? r.json() : { result: [] })
-          .catch(() => ({ result: [] })),
-        fetch('/api/odp', opts).then(r => r.json()),
+        fetch('/api/onu',         opts).then(r => r.json()),
+        fetch('/api/zabbix-infra',opts).then(r => r.ok ? r.json() : { result: [] }).catch(() => ({ result: [] })),
+        fetch('/api/odp',         opts).then(r => r.json()),
       ]);
 
-      const allOnus = Array.isArray(onuData) ? onuData : (onuData.result || []);
-      const allInfras = Array.isArray(infraData) ? infraData : (infraData.result || []);
-      const allOdps = Array.isArray(odpData) ? odpData : (odpData.result || []);
+      const allOnus   = Array.isArray(onuData)   ? onuData   : (onuData.result   || []);
+      const allInfras = Array.isArray(infraData)  ? infraData : (infraData.result || []);
+      const allOdps   = Array.isArray(odpData)    ? odpData   : (odpData.result   || []);
 
-      setOnus(allOnus.filter((o: Onu) => o.latitude && o.longitude));
+      setOnus  (allOnus  .filter((o: Onu)   => o.latitude && o.longitude));
       setInfras(allInfras.filter((i: Infra) => i.inventory?.location_lat && i.inventory?.location_lon));
-      setOdps(allOdps.filter((o: Odp) => o.latitude && o.longitude));
+      setOdps  (allOdps  .filter((o: Odp)   => o.latitude && o.longitude));
 
       // ── writeLog: ONU kritis ──────────────────────────────
-      const prevErrors = getActiveErrors();
+      const prevErrors    = getActiveErrors();
       const currentErrors = new Set<string>();
 
       allOnus.forEach((onu: Onu) => {
-        const rx = parseFloat(onu.rx_power);
+        const rx  = parseFloat(onu.rx_power);
         const key = `onu-crit-${onu.id}`;
         if (rx <= -27) {
           currentErrors.add(key);
           if (!prevErrors.has(key)) {
-            writeLog('critical', 'ONU', onu.customer || onu.mac_address, `Sinyal kritis terdeteksi: ${onu.rx_power} dBm`);
+            writeLog('critical', 'ONU', onu.customer || onu.mac_address,
+              `Sinyal kritis terdeteksi: ${onu.rx_power} dBm`);
           }
         } else if (prevErrors.has(key)) {
           resolveLog(onu.customer || onu.mac_address, 'ONU');
@@ -123,17 +153,15 @@ export default function MapView() {
       // ── writeLog: Infra down ──────────────────────────────
       allInfras.forEach((infra: Infra) => {
         const isDown = infra.interfaces?.some((i: any) => i.available === '2') || false;
-        const key = `infra-${infra.hostid}`;
-
+        const key    = `infra-${infra.hostid}`;
         if (isDown) {
           currentErrors.add(key);
           if (!prevErrors.has(key)) {
             const nameLow = infra.name.toLowerCase();
-            let deviceType = 'Perangkat Jaringan';
-            if (nameLow.includes('mikrotik')) deviceType = 'Router MikroTik';
-            else if (nameLow.includes('olt')) deviceType = 'OLT HiOSO';
-            else deviceType = `Server (${infra.name})`;
-
+            const deviceType =
+              nameLow.includes('mikrotik') ? 'Router MikroTik' :
+              nameLow.includes('olt')      ? 'OLT HiOSO'       :
+              `Server (${infra.name})`;
             writeLog('critical', 'Infra', infra.name, `${deviceType} tidak merespons / down`);
           }
         } else if (prevErrors.has(key)) {
@@ -142,7 +170,6 @@ export default function MapView() {
       });
 
       saveActiveErrors(currentErrors);
-
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {
@@ -157,31 +184,28 @@ export default function MapView() {
     return () => clearInterval(t);
   }, [fetchAll, isMounted]);
 
-  const mikrotik = infras.find(i => i.name.toLowerCase().includes('mikrotik'));
-  const olt = infras.find(i => i.name.toLowerCase().includes('olt'));
-  const isOltDown = olt?.interfaces?.some(i => i.available === '2') || false;
+  const mikrotik  = infras.find(i => i.name.toLowerCase().includes('mikrotik'));
+  const olt       = infras.find(i => i.name.toLowerCase().includes('olt'));
+  const isOltDown = olt?.interfaces?.some(i => i.available === '2')      || false;
   const isMikDown = mikrotik?.interfaces?.some(i => i.available === '2') || false;
-  const coreDown = isOltDown || isMikDown;
- 
-
+  const coreDown  = isOltDown || isMikDown;
 
   if (!isMounted) return null;
 
   return (
     <div className={styles.mapWrap} style={{ position: 'relative' }}>
 
-      {/* Loading Overlay */}
+      {/* Loading overlay */}
       {isLoading && (
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(255,255,255,0.7)', zIndex: 9999,
           display: 'flex', justifyContent: 'center', alignItems: 'center',
-          fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 600, color: '#374151'
+          fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 600, color: '#374151',
         }}>
           Memuat data jaringan...
         </div>
       )}
-
 
       <MapContainer
         center={[-7.5361, 112.4368]}
@@ -193,115 +217,174 @@ export default function MapView() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {/* Backbone MikroTik ↔ OLT */}
+        {/* ── Backbone: MikroTik ↔ OLT ──────────────────────── */}
         {mikrotik && olt && (
           <Polyline
             positions={[
               [parseFloat(mikrotik.inventory.location_lat), parseFloat(mikrotik.inventory.location_lon)],
-              [parseFloat(olt.inventory.location_lat), parseFloat(olt.inventory.location_lon)],
+              [parseFloat(olt.inventory.location_lat),      parseFloat(olt.inventory.location_lon)],
             ]}
             pathOptions={{
-              color: coreDown ? '#ef4444' : '#6366f1',
-              weight: 4,
-              opacity: 0.8,
-              dashArray: '10, 10' // simulating the dashed look
+              color:     coreDown ? '#EF4444' : '#6366F1',
+              weight:    4,
+              opacity:   0.85,
+              dashArray: '10, 8',
             }}
           />
         )}
 
-        {/* 1. Trunk: OLT → ODC */}
+        {/* ── Trunk: OLT → ODC ──────────────────────────────── */}
         {olt && odps.filter(o => o.type === 'ODC').map(odc => (
-          <Polyline key={`trunk-odc-${odc.id}`}
+          <Polyline
+            key={`trunk-odc-${odc.id}`}
             positions={[
               [parseFloat(olt.inventory.location_lat), parseFloat(olt.inventory.location_lon)],
-              [parseFloat(odc.latitude), parseFloat(odc.longitude)],
+              [parseFloat(odc.latitude),               parseFloat(odc.longitude)],
             ]}
-            pathOptions={{ color: coreDown ? '#ef4444' : '#3b82f6', weight: 4, opacity: 0.9 }}
+            pathOptions={{ color: coreDown ? '#EF4444' : '#3B82F6', weight: 4, opacity: 0.9 }}
           />
         ))}
 
-        {/* 2. Distribusi: ODC → ODP */}
+        {/* ── Distribusi: ODC → ODP ─────────────────────────── */}
         {odps.filter(o => o.type === 'ODP' && o.odc_id).map(odp => {
           const parentOdc = odps.find(x => x.id === odp.odc_id);
           if (!parentOdc) return null;
           return (
-            <Polyline key={`dist-${odp.id}`}
+            <Polyline
+              key={`dist-${odp.id}`}
               positions={[
                 [parseFloat(parentOdc.latitude), parseFloat(parentOdc.longitude)],
-                [parseFloat(odp.latitude), parseFloat(odp.longitude)],
+                [parseFloat(odp.latitude),       parseFloat(odp.longitude)],
               ]}
-              pathOptions={{ color: '#10b981', weight: 3, opacity: 0.8 }}
+              pathOptions={{ color: '#10B981', weight: 3, opacity: 0.8 }}
             />
           );
         })}
 
-        {/* Drop ODP → ONU */}
+        {/* ── Drop: ODP → ONU ───────────────────────────────── */}
         {onus.filter(o => o.odp_id).map(onu => {
           const parent = odps.find(o => o.id === onu.odp_id);
           if (!parent) return null;
-          const rx = parseFloat(onu.rx_power);
-          const color = rx <= -27 ? '#ef4444' : rx <= -25 ? '#f59e0b' : '#22c55e';
+          const rx    = parseFloat(onu.rx_power);
+          const color = rx <= -27 ? '#EF4444' : rx <= -25 ? '#F59E0B' : '#22C55E';
           return (
-            <Polyline key={`drop-${onu.id}`}
+            <Polyline
+              key={`drop-${onu.id}`}
               positions={[
                 [parseFloat(parent.latitude), parseFloat(parent.longitude)],
-                [parseFloat(onu.latitude), parseFloat(onu.longitude)],
+                [parseFloat(onu.latitude),    parseFloat(onu.longitude)],
               ]}
-              pathOptions={{ color, weight: 2, opacity: 0.8 }}
+              pathOptions={{ color, weight: 2, opacity: 0.75 }}
             />
           );
         })}
 
-        {/* Marker Infra */}
-        {infras.map(infra => {
-          const isDown = infra.interfaces?.some(i => i.available === '2') || false;
-          const isMikro = infra.name.toLowerCase().includes('mikrotik');
-          const iconComp = isMikro ? <MikrotikIcon down={isDown} /> : <OltIcon down={isDown} />;
-          return (
-            <Marker
-              key={infra.hostid}
-              position={[parseFloat(infra.inventory.location_lat), parseFloat(infra.inventory.location_lon)]}
-              icon={createIcon(iconComp, [38, 38])}
-            >
-              <Popup>
-                <InfoCard>
-                  <div style={pp.head}>
-                    <div style={{ ...pp.icon, background: isDown ? '#fff1f2' : isMikro ? '#f3e8ff' : '#dbeafe' }}>
-                      {isMikro ? '🔀' : '📡'}
-                    </div>
-                    <div>
-                      <div style={pp.name}>{infra.name}</div>
-                      <div style={pp.sub}>{isMikro ? 'Router Core' : 'Optical Line Terminal'}</div>
-                    </div>
-                  </div>
-                  <div style={pp.row}><span style={pp.lbl}>Status</span><StatusBadge ok={!isDown} /></div>
-                  <div style={pp.row}>
-                    <span style={pp.lbl}>Tipe</span>
-                    <span style={{ ...pp.val, color: isMikro ? '#9333ea' : '#3b82f6' }}>
-                      {isMikro ? 'MikroTik' : 'OLT HIOSO'}
-                    </span>
-                  </div>
-                </InfoCard>
-              </Popup>
-            </Marker>
-          );
-        })}
+        {/* @ts-ignore - Bypass TS error karena type bawaan library kurang lengkap */}
+        <MarkerClusterGroup iconCreateFunction={createCoreClusterIcon}>
+          {infras.map(infra => {
+            const isDown  = infra.interfaces?.some(i => i.available === '2') || false;
+            const isMikro = infra.name.toLowerCase().includes('mikrotik');
+            const iconEl  = isMikro
+              ? <MikrotikIcon down={isDown} />
+              : <OltIcon      down={isDown} />;
+            const iconSize: [number, number] = isMikro ? [38, 38] : [40, 40];
 
-        {/* Marker ODP */}
-        {odps.map(odp => {
+            return (
+              <Marker
+                key={infra.hostid}
+                // Pakai koordinat asli, nggak usah ditambah/dikurang 0.00015 lagi
+                position={[
+                  parseFloat(infra.inventory.location_lat),
+                  parseFloat(infra.inventory.location_lon),
+                ]}
+                icon={createIcon(iconEl, iconSize)}
+              >
+                <Popup>
+                  <InfoCard>
+                    <div style={pp.head}>
+                      <div style={{
+                        ...pp.icon,
+                        background: isDown ? '#FFF1F2' : isMikro ? '#F3E8FF' : '#DBEAFE',
+                      }}>
+                        {isMikro ? '🔀' : '📡'}
+                      </div>
+                      <div>
+                        <div style={pp.name}>{infra.name}</div>
+                        <div style={pp.sub}>{isMikro ? 'Router Core' : 'Optical Line Terminal'}</div>
+                      </div>
+                    </div>
+                    <div style={pp.row}>
+                      <span style={pp.lbl}>Status</span>
+                      <StatusBadge ok={!isDown} />
+                    </div>
+                    <div style={pp.row}>
+                      <span style={pp.lbl}>Tipe</span>
+                      <span style={{ ...pp.val, color: isMikro ? '#7C3AED' : '#2563EB' }}>
+                        {isMikro ? 'MikroTik' : 'OLT HIOSO'}
+                      </span>
+                    </div>
+                  </InfoCard>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
+
+        {/* ── Marker: ODC ───────────────────────────────────── */}
+        {odps.filter(o => o.type === 'ODC').map(odc => (
+          <Marker
+            key={`odc-${odc.id}`}
+            position={[parseFloat(odc.latitude), parseFloat(odc.longitude)]}
+            icon={createIcon(<OdcIcon full={false} />, [36, 36])} 
+          >
+            <Popup>
+              <InfoCard>
+                <div style={pp.head}>
+                  <div style={{ ...pp.icon, background: '#EDE9FE' }}>🔀</div>
+                  <div>
+                    <div style={pp.name}>{odc.name}</div>
+                    <div style={pp.sub}>Optical Distribution Cabinet</div>
+                  </div>
+                </div>
+                <div style={pp.row}>
+                  <span style={pp.lbl}>Tipe</span>
+                  <span style={{ ...pp.val, color: '#6D28D9' }}>ODC Splitter</span>
+                </div>
+                <div style={pp.row}>
+                  <span style={pp.lbl}>ODP terhubung</span>
+                  <span style={pp.val}>
+                    {odps.filter(o => o.type === 'ODP' && o.odc_id === odc.id).length}
+                  </span>
+                </div>
+              </InfoCard>
+            </Popup>
+          </Marker>
+        ))}
+
+        {/* ── Marker: ODP ───────────────────────────────────── */}
+        {odps.filter(o => o.type === 'ODP').map(odp => {
           const terisi = onus.filter(o => o.odp_id === odp.id).length;
-          const isFull = terisi >= odp.total_port;
-          const pct = odp.total_port > 0 ? Math.round((terisi / odp.total_port) * 100) : 0;
+          const pct    = odp.total_port > 0 ? Math.round((terisi / odp.total_port) * 100) : 0;
+          const level: 'ok' | 'warn' | 'full' =
+            pct >= 100 ? 'full' : pct >= 75 ? 'warn' : 'ok';
+          const levelColor =
+            level === 'full' ? '#EF4444' : level === 'warn' ? '#EA580C' : '#16A34A';
+
           return (
             <Marker
               key={`odp-${odp.id}`}
               position={[parseFloat(odp.latitude), parseFloat(odp.longitude)]}
-              icon={createIcon(<OdpIcon full={isFull} />, [32, 32])}
+              icon={createIcon(<OdpIcon level={level} />, [32, 32])}
             >
               <Popup>
                 <InfoCard>
                   <div style={pp.head}>
-                    <div style={{ ...pp.icon, background: isFull ? '#fff7ed' : '#f0fdf4' }}>🔌</div>
+                    <div style={{
+                      ...pp.icon,
+                      background: level === 'full' ? '#FFF1F2' : level === 'warn' ? '#FFF7ED' : '#F0FDF4',
+                    }}>
+                      🔌
+                    </div>
                     <div>
                       <div style={pp.name}>{odp.name}</div>
                       <div style={pp.sub}>Optical Distribution Point</div>
@@ -309,31 +392,47 @@ export default function MapView() {
                   </div>
                   <div style={pp.row}>
                     <span style={pp.lbl}>Port terpakai</span>
-                    <span style={{ ...pp.val, color: isFull ? '#ef4444' : '#16a34a' }}>{terisi} / {odp.total_port}</span>
+                    <span style={{ ...pp.val, color: levelColor }}>
+                      {terisi} / {odp.total_port}
+                    </span>
                   </div>
                   <div style={pp.row}>
                     <span style={pp.lbl}>Kapasitas</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 60, height: 4, background: '#e4e7ef', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: isFull ? '#ef4444' : '#16a34a', borderRadius: 2 }} />
+                      <div style={{
+                        width: 60, height: 4, background: '#E4E7EF',
+                        borderRadius: 2, overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${pct}%`, height: '100%',
+                          background: levelColor, borderRadius: 2,
+                        }} />
                       </div>
                       <span style={{ ...pp.val, fontSize: 11 }}>{pct}%</span>
                     </div>
                   </div>
-                  <div style={pp.row}><span style={pp.lbl}>Status</span><StatusBadge ok={!isFull} okLabel="Tersedia" failLabel="Penuh" /></div>
+                  <div style={pp.row}>
+                    <span style={pp.lbl}>Status</span>
+                    <StatusBadge
+                      ok={level === 'ok'}
+                      okLabel="Tersedia"
+                      failLabel={level === 'full' ? 'Penuh' : 'Hampir Penuh'}
+                    />
+                  </div>
                 </InfoCard>
               </Popup>
             </Marker>
           );
         })}
 
-        {/* Marker ONU */}
+        {/* ── Marker: ONU ───────────────────────────────────── */}
         {onus.map(onu => {
-          const rx = parseFloat(onu.rx_power);
+          const rx         = parseFloat(onu.rx_power);
           const isCritical = rx <= -27;
-          const isWarning = rx <= -25 && !isCritical;
-          const level = isCritical ? 'critical' : isWarning ? 'warning' : 'ok';
-          const rxColor = isCritical ? '#ef4444' : isWarning ? '#d97706' : '#16a34a';
+          const isWarning  = rx > -27 && rx <= -25;
+          const level      = isCritical ? 'critical' : isWarning ? 'warning' : 'ok';
+          const rxColor    = isCritical ? '#EF4444'  : isWarning ? '#D97706' : '#16A34A';
+
           return (
             <Marker
               key={`onu-${onu.id}`}
@@ -343,11 +442,18 @@ export default function MapView() {
               <Popup>
                 <InfoCard>
                   <div style={pp.head}>
-                    <div style={{ ...pp.icon, background: isCritical ? '#fff1f2' : isWarning ? '#fffbeb' : '#f0fdf4' }}>🏠</div>
+                    <div style={{
+                      ...pp.icon,
+                      background: isCritical ? '#FFF1F2' : isWarning ? '#FFFBEB' : '#F0FDF4',
+                    }}>
+                      🏠
+                    </div>
                     <div>
                       <div style={pp.name}>{onu.customer || 'Pelanggan'}</div>
                       <div style={pp.sub} title={onu.mac_address}>
-                        {onu.mac_address.length > 14 ? onu.mac_address.slice(0, 14) + '…' : onu.mac_address}
+                        {onu.mac_address.length > 14
+                          ? onu.mac_address.slice(0, 14) + '…'
+                          : onu.mac_address}
                       </div>
                     </div>
                   </div>
@@ -361,18 +467,28 @@ export default function MapView() {
                   <div style={pp.row}>
                     <span style={pp.lbl}>Kondisi sinyal</span>
                     <span style={{
-                      ...pp.badge, color: rxColor,
-                      background: isCritical ? '#fff1f2' : isWarning ? '#fffbeb' : '#f0fdf4',
-                      border: `1px solid ${isCritical ? '#fecaca' : isWarning ? '#fde68a' : '#bbf7d0'}`,
+                      ...pp.badge,
+                      color:      rxColor,
+                      background: isCritical ? '#FFF1F2' : isWarning ? '#FFFBEB' : '#F0FDF4',
+                      border:     `1px solid ${isCritical ? '#FECACA' : isWarning ? '#FDE68A' : '#BBF7D0'}`,
                     }}>
                       {isCritical ? 'Kritis' : isWarning ? 'Warning' : 'Aman'}
                     </span>
                   </div>
+                  {onu.odp_id && (
+                    <div style={pp.row}>
+                      <span style={pp.lbl}>ODP</span>
+                      <span style={pp.val}>
+                        {odps.find(o => o.id === onu.odp_id)?.name || `#${onu.odp_id}`}
+                      </span>
+                    </div>
+                  )}
                 </InfoCard>
               </Popup>
             </Marker>
           );
         })}
+
       </MapContainer>
     </div>
   );
