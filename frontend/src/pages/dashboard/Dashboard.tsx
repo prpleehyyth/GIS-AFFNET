@@ -23,7 +23,7 @@ export default function Dashboard() {
     document.title = "Dashboard | AFF NET GIS";
 
     // ✅ UBAH KETIGA FETCH MENJADI RELATIVE PATH:
-Promise.all([
+    Promise.all([
       fetch('/api/onu', { credentials: 'include' }).then(r => r.json()),
       fetch('/api/zabbix-infra', { credentials: 'include' })
         .then(r => { if (!r.ok) { setInfraError(true); return { result: [] }; } return r.json(); })

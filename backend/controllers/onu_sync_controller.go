@@ -70,16 +70,8 @@ func extractMacAddress(input string) string {
 // ─────────────────────────────────────────────
 // getZabbixAuthToken: login ke Zabbix API, return auth token
 // ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
-// SyncOnuFromZabbix
-// GET/POST /api/sync-onu
-// ─────────────────────────────────────────────
-func SyncOnuFromZabbix(c *gin.Context) {
-
-	// ================================================================
-	// 1. TARIK DATA PPPoE AKTIF DARI MIKROTIK
-	// Key map: normalized MAC (12 hex uppercase), value: username PPPoE
-	// ================================================================
+// FetchAndProcessOnuSync mengeksekusi logika sync ONU dan mereturn map statistik
+func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 	macToCustomer := make(map[string]string)
 
 	mkClient, errMk := routeros.Dial(
@@ -89,15 +81,9 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	)
 
 	if errMk != nil {
-		// Tidak hard-fail: sync Zabbix tetap jalan, Customer hanya tidak terisi
 		fmt.Printf("[WARN] Gagal konek MikroTik: %v — sinkronisasi lanjut tanpa data Customer\n", errMk)
 	} else {
-		// FIX BUG 3: defer di luar blok if, setelah cek error.
-		// Sebelumnya defer ada di DALAM blok if errMk == nil,
-		// sehingga Go meregister defer saat blok if selesai —
-		// artinya client bisa ditutup sebelum Run() selesai dieksekusi.
 		defer mkClient.Close()
-
 		reply, errRun := mkClient.Run("/ppp/active/print")
 		if errRun != nil {
 			fmt.Printf("[WARN] Gagal baca PPPoE aktif: %v\n", errRun)
@@ -105,32 +91,18 @@ func SyncOnuFromZabbix(c *gin.Context) {
 			for _, re := range reply.Re {
 				callerID := re.Map["caller-id"]
 				username  := strings.TrimSpace(re.Map["name"])
-
-				// FIX BUG 1: normalizeMac() memastikan format apapun dari MikroTik
-				// (c8:3a:..., C8-3A-..., c83a35...) diubah ke 12 hex uppercase
-				// sebelum dijadikan key, sehingga lookup dari Zabbix selalu cocok.
 				key := normalizeMac(callerID)
 				if key != "" && username != "" {
 					macToCustomer[key] = username
 				}
-
-				// DEBUG: uncomment untuk cek format caller-id asli dari MikroTik
-				// fmt.Printf("[DEBUG] caller-id raw: %q → normalized: %q → user: %q\n", callerID, key, username)
 			}
 			fmt.Printf("[INFO] PPPoE aktif dimuat: %d sesi\n", len(macToCustomer))
 		}
 	}
 
-	// ================================================================
-	// 2. LOGIN ZABBIX & TARIK ITEM "REDAMAN ONU"
-	// ================================================================
 	token, err := getZabbixAuthToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":  "Gagal login ke Zabbix",
-			"detail": err.Error(),
-		})
-		return
+		return nil, fmt.Errorf("gagal login ke Zabbix: %v", err)
 	}
 
 	zabbixPayload := models.ZabbixRequest{
@@ -148,18 +120,13 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	jb, _ := json.Marshal(zabbixPayload)
 	resp, errZ := http.Post(ZabbixURL, "application/json-rpc", bytes.NewBuffer(jb))
 	if errZ != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error":  "Zabbix tidak merespon",
-			"detail": errZ.Error(),
-		})
-		return
+		return nil, fmt.Errorf("zabbix tidak merespon: %v", errZ)
 	}
 	defer resp.Body.Close()
 
 	itemBody, errRead := io.ReadAll(resp.Body)
 	if errRead != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca response Zabbix"})
-		return
+		return nil, fmt.Errorf("gagal membaca response Zabbix: %v", errRead)
 	}
 
 	var zabbixData struct {
@@ -176,57 +143,31 @@ func SyncOnuFromZabbix(c *gin.Context) {
 	}
 
 	if errUnmarshal := json.Unmarshal(itemBody, &zabbixData); errUnmarshal != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":  "Gagal parsing JSON Zabbix",
-			"detail": errUnmarshal.Error(),
-		})
-		return
+		return nil, fmt.Errorf("gagal parsing JSON Zabbix: %v", errUnmarshal)
 	}
 	if zabbixData.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":  "Zabbix API error",
-			"detail": zabbixData.Error.Message,
-		})
-		return
+		return nil, fmt.Errorf("zabbix API error: %s", zabbixData.Error.Message)
 	}
 
-	// ================================================================
-	// 3. MERGE DATA + UPSERT KE DATABASE
-	// ================================================================
 	const batasKritis = -25.0
-
 	countNew      := 0
 	countUpdate   := 0
 	countCustomer := 0
 	countSkip     := 0
 
 	for _, item := range zabbixData.Result {
-
-		// a. Ekstrak MAC dari nama item Zabbix (format: AA:BB:CC:DD:EE:FF untuk DB)
 		dbMac := extractMacAddress(item.Name)
 		if dbMac == "" {
 			countSkip++
 			continue
 		}
 
-		// b. Normalisasi MAC untuk lookup map (12 hex uppercase)
-		// FIX BUG 1 (lanjutan): pakai normalizeMac(dbMac) sebagai lookup key,
-		// BUKAN dbMac langsung — agar cocok dengan key di macToCustomer
-		// yang juga sudah dinormalisasi dari MikroTik.
 		lookupKey := normalizeMac(dbMac)
-
-		// c. Exact match lookup — TANPA fuzzy match
-		// FIX BUG 2: fuzzy match "11 digit sama" dihapus karena berbahaya.
-		// Contoh: C83A353CAAB8 (Zabbix) vs C83A353CAAB9 (MikroTik tetangga)
-		// → 11 digit sama → salah pasang customer ke ONU beda.
-		// Exact match lebih aman. Jika tidak match, Customer tetap kosong
-		// dan tidak menimpa data yang sudah ada.
 		customerName := macToCustomer[lookupKey]
 		if customerName != "" {
 			countCustomer++
 		}
 
-		// d. Evaluasi redaman & notifikasi Telegram (anti-spam)
 		rxPowerFloat, errParse := strconv.ParseFloat(item.Lastvalue, 64)
 		if errParse == nil {
 			if rxPowerFloat < batasKritis {
@@ -236,7 +177,6 @@ func SyncOnuFromZabbix(c *gin.Context) {
 					First(&existingLog).Error
 
 				if errLog != nil {
-					// Belum ada log aktif → buat baru + kirim notif
 					pesan := fmt.Sprintf("Sinyal kritis: %s dBm (batas: %.0f dBm)", item.Lastvalue, batasKritis)
 					if customerName != "" {
 						pesan += fmt.Sprintf(" | Pelanggan: %s", customerName)
@@ -251,7 +191,6 @@ func SyncOnuFromZabbix(c *gin.Context) {
 					go services.SendTelegramNotification(newLog)
 				}
 			} else {
-				// Sinyal sudah normal → auto-resolve log yang aktif
 				res := config.DB.Model(&models.Log{}).
 					Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
 					Updates(map[string]interface{}{
@@ -260,7 +199,6 @@ func SyncOnuFromZabbix(c *gin.Context) {
 					})
 				
 				if res.RowsAffected > 0 {
-					// Skenario 2: Catat log saat perangkat pulih kembali
 					msgInfo := "Sinyal ONU kembali normal (Up)"
 					if customerName != "" {
 						msgInfo += fmt.Sprintf(" | Pelanggan: %s", customerName)
@@ -270,7 +208,6 @@ func SyncOnuFromZabbix(c *gin.Context) {
 			}
 		}
 
-		// e. Upsert tabel ONU
 		var existingOnu models.Onu
 		result := config.DB.Where("mac_address = ?", dbMac).First(&existingOnu)
 
@@ -279,8 +216,6 @@ func SyncOnuFromZabbix(c *gin.Context) {
 				"rx_power": item.Lastvalue,
 				"status":   "Online",
 			}
-			// Hanya update Customer jika PPPoE match ditemukan.
-			// Tidak menimpa data yang sudah diisi manual saat pelanggan offline.
 			if customerName != "" {
 				updateData["customer"] = customerName
 			}
@@ -304,10 +239,7 @@ func SyncOnuFromZabbix(c *gin.Context) {
 		}
 	}
 
-	// ================================================================
-	// 4. RESPONSE — detail untuk debugging
-	// ================================================================
-	c.JSON(http.StatusOK, gin.H{
+	return map[string]interface{}{
 		"message":          "Sinkronisasi selesai",
 		"total_zabbix":     len(zabbixData.Result),
 		"total_pppoe":      len(macToCustomer),
@@ -315,5 +247,16 @@ func SyncOnuFromZabbix(c *gin.Context) {
 		"onu_diupdate":     countUpdate,
 		"customer_matched": countCustomer,
 		"item_skip_no_mac": countSkip,
-	})
+	}, nil
+}
+
+// SyncOnuFromZabbix
+// GET/POST /api/sync-onu
+func SyncOnuFromZabbix(c *gin.Context) {
+	stats, err := FetchAndProcessOnuSync()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }

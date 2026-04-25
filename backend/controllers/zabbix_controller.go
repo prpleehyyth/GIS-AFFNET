@@ -44,35 +44,35 @@ func getZabbixAuthToken() (string, error) {
 	return result.Result, nil
 }
 
-// GetZabbixInfra: Ambil Lokasi Mikrotik & OLT
-func GetZabbixInfra(c *gin.Context) {
+// FetchAndProcessZabbixInfra menarik data dari Zabbix dan memproses log/database
+func FetchAndProcessZabbixInfra() ([]byte, error) {
 	token, err := getZabbixAuthToken()
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Gagal login ke Zabbix"})
-		return
+		return nil, fmt.Errorf("gagal login ke Zabbix: %v", err)
 	}
 
 	payload := models.ZabbixRequest{
 		Jsonrpc: "2.0",
 		Method:  "host.get",
 		Params:  map[string]interface{}{
-            // Pake "extend" biar Zabbix ngeluarin SEMUA datanya
             "output": "extend", 
             "selectInventory": []string{"location_lat", "location_lon", "location"},
-            "selectInterfaces": "extend", // Panggil semua info interface
+            "selectInterfaces": "extend",
         },
 		Auth: token,
 		ID:   2,
 	}
 
 	jb, _ := json.Marshal(payload)
-	resp, _ := http.Post(ZabbixURL, "application/json-rpc", bytes.NewBuffer(jb))
+	resp, err := http.Post(ZabbixURL, "application/json-rpc", bytes.NewBuffer(jb))
+	if err != nil {
+		return nil, fmt.Errorf("gagal menghubungi Zabbix: %v", err)
+	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membaca response dari Zabbix"})
-		return
+		return nil, fmt.Errorf("gagal membaca response dari Zabbix: %v", err)
 	}
 
 	// Parsing response untuk ngecek status perangkat (Infra)
@@ -136,12 +136,10 @@ func GetZabbixInfra(c *gin.Context) {
 			services.RecordLog("info", "Infra", host.Name, msg)
 		} else {
 			// Skenario 4: Mengubah koordinat lokasi perangkat
-			// Hanya deteksi jika koordinat sebelumnya ada isinya (tidak kosong) atau jika berubah dari ada isinya ke isi yang berbeda
 			if (existingInfra.Lat != lat || existingInfra.Lon != lon) && (lat != "" && lon != "") {
 				msg := fmt.Sprintf("Lokasi koordinat %s berubah (Lat: %s, Lon: %s)", deviceType, lat, lon)
 				services.RecordLog("info", "Infra", host.Name, msg)
 				
-				// Update DB agar tidak log berulang-ulang
 				config.DB.Model(&existingInfra).Updates(map[string]interface{}{
 					"lat": lat,
 					"lon": lon,
@@ -150,6 +148,15 @@ func GetZabbixInfra(c *gin.Context) {
 		}
 	}
 
-	// Kirimkan response asli kembali ke frontend
+	return bodyBytes, nil
+}
+
+// GetZabbixInfra: Ambil Lokasi Mikrotik & OLT
+func GetZabbixInfra(c *gin.Context) {
+	bodyBytes, err := FetchAndProcessZabbixInfra()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.Data(http.StatusOK, "application/json", bodyBytes)
 }
