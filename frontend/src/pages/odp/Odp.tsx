@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
 import { Odp, OdpForm, OdpTable, OdpModal, DeleteConfirmModal } from './components';
-import { writeLog } from '@/lib/logService';
 import styles from './odp.module.css';
 
 const BASE_URL = '/api/odp';
@@ -39,9 +38,6 @@ export default function OdpPage() {
       body: JSON.stringify(form),
     });
     if (res.ok) {
-      writeLog('info', 'ODP', form.name,
-        editId ? `${form.type} diperbarui` : `${form.type} baru ditambahkan`
-      );
       closeModal();
       await refresh();
     }
@@ -50,9 +46,7 @@ export default function OdpPage() {
 
   const confirmDelete = async () => {
     if (deleteConfirmId === null) return;
-    const target = odps.find(o => o.id === deleteConfirmId);
     await fetch(`${BASE_URL}/${deleteConfirmId}`, { method: 'DELETE', credentials: 'include' });
-    if (target) writeLog('info', 'ODP', target.name, `${target.type} dihapus dari sistem`);
     setDeleteConfirmId(null);
     await refresh();
   };

@@ -3,8 +3,10 @@ package controllers
 import (
 	"affnet-backend/config"
 	"affnet-backend/models"
+	"affnet-backend/services"
+	"fmt"
 	"net/http"
-    "fmt"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,6 +17,7 @@ func CreateOdp(c *gin.Context) {
 		return
 	}
 	config.DB.Create(&odp)
+	services.RecordLog("info", "ODP", odp.Name, odp.Type+" ditambahkan ke sistem")
 	c.JSON(http.StatusOK, odp)
 }
 
@@ -67,6 +70,8 @@ func DeleteOdp(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus tiang ODP"})
         return
     }
+
+	services.RecordLog("info", "ODP", odp.Name, odp.Type+" dihapus dari sistem")
 
     c.JSON(http.StatusOK, gin.H{"message": "ODP AFF NET berhasil dihapus bersih!"})
 }

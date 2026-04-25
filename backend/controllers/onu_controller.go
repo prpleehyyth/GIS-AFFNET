@@ -3,6 +3,7 @@ package controllers
 import (
 	"affnet-backend/config"
 	"affnet-backend/models"
+	"affnet-backend/services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,12 @@ func UpdateOnuDetails(c *gin.Context) {
 		return
 	}
 
+	// Skenario 4: Catat log saat koordinat lokasi perangkat diubah
+	if existingOnu.Latitude != input.Latitude || existingOnu.Longitude != input.Longitude {
+		msg := "Lokasi koordinat perangkat ONU diperbarui (Lat: " + input.Latitude + ", Lon: " + input.Longitude + ")"
+		services.RecordLog("info", "ONU", macAddress, msg)
+	}
+
 	// Ambil data terbaru setelah di-update (termasuk updated_at yang baru)
 	config.DB.Where("mac_address = ?", macAddress).First(&existingOnu)
 
@@ -71,5 +78,7 @@ func DeleteOnu(c *gin.Context) {
 		return
 	}
 	
+	services.RecordLog("info", "ONU", "ID "+id, "Perangkat ONU telah dihapus dari sistem")
+
 	c.JSON(http.StatusOK, gin.H{"message": "Data ONU berhasil dihapus"})
 }

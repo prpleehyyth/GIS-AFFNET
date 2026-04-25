@@ -252,12 +252,21 @@ func SyncOnuFromZabbix(c *gin.Context) {
 				}
 			} else {
 				// Sinyal sudah normal → auto-resolve log yang aktif
-				config.DB.Model(&models.Log{}).
+				res := config.DB.Model(&models.Log{}).
 					Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
 					Updates(map[string]interface{}{
 						"resolved":    true,
 						"resolved_at": time.Now(),
 					})
+				
+				if res.RowsAffected > 0 {
+					// Skenario 2: Catat log saat perangkat pulih kembali
+					msgInfo := "Sinyal ONU kembali normal (Up)"
+					if customerName != "" {
+						msgInfo += fmt.Sprintf(" | Pelanggan: %s", customerName)
+					}
+					services.RecordLog("info", "ONU", dbMac, msgInfo)
+				}
 			}
 		}
 
@@ -284,6 +293,13 @@ func SyncOnuFromZabbix(c *gin.Context) {
 				Status:     "Online",
 				Customer:   customerName,
 			})
+			
+			msg := "Perangkat ONU baru terdeteksi"
+			if customerName != "" {
+				msg += " (Pelanggan: " + customerName + ")"
+			}
+			services.RecordLog("info", "ONU", dbMac, msg)
+			
 			countNew++
 		}
 	}

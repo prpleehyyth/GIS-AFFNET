@@ -10,7 +10,6 @@ import {
   OltIcon, MikrotikIcon, OdcIcon, OdpIcon, OnuIcon,
   SignalBars, StatusBadge, pp,
 } from './Components';
-import { writeLog, resolveLog } from '@/lib/logService';
 import styles from './Map.module.css';
 
 const POLL_MS = 15_000;
@@ -105,14 +104,6 @@ export default function MapView() {
   const [infras, setInfras]         = useState<Infra[]>([]);
   const [odps,   setOdps]           = useState<Odp[]>([]);
 
-  const getActiveErrors = () => {
-    try { return new Set<string>(JSON.parse(localStorage.getItem('ae') || '[]')); }
-    catch { return new Set<string>(); }
-  };
-  const saveActiveErrors = (s: Set<string>) => {
-    localStorage.setItem('ae', JSON.stringify([...s]));
-  };
-
   useEffect(() => { setIsMounted(true); }, []);
 
   const fetchAll = useCallback(async () => {
@@ -131,45 +122,6 @@ export default function MapView() {
       setOnus  (allOnus  .filter((o: Onu)   => o.latitude && o.longitude));
       setInfras(allInfras.filter((i: Infra) => i.inventory?.location_lat && i.inventory?.location_lon));
       setOdps  (allOdps  .filter((o: Odp)   => o.latitude && o.longitude));
-
-      // ── writeLog: ONU kritis ──────────────────────────────
-      const prevErrors    = getActiveErrors();
-      const currentErrors = new Set<string>();
-
-      allOnus.forEach((onu: Onu) => {
-        const rx  = parseFloat(onu.rx_power);
-        const key = `onu-crit-${onu.id}`;
-        if (rx <= -27) {
-          currentErrors.add(key);
-          if (!prevErrors.has(key)) {
-            writeLog('critical', 'ONU', onu.customer || onu.mac_address,
-              `Sinyal kritis terdeteksi: ${onu.rx_power} dBm`);
-          }
-        } else if (prevErrors.has(key)) {
-          resolveLog(onu.customer || onu.mac_address, 'ONU');
-        }
-      });
-
-      // ── writeLog: Infra down ──────────────────────────────
-      allInfras.forEach((infra: Infra) => {
-        const isDown = infra.interfaces?.some((i: any) => i.available === '2') || false;
-        const key    = `infra-${infra.hostid}`;
-        if (isDown) {
-          currentErrors.add(key);
-          if (!prevErrors.has(key)) {
-            const nameLow = infra.name.toLowerCase();
-            const deviceType =
-              nameLow.includes('mikrotik') ? 'Router MikroTik' :
-              nameLow.includes('olt')      ? 'OLT HiOSO'       :
-              `Server (${infra.name})`;
-            writeLog('critical', 'Infra', infra.name, `${deviceType} tidak merespons / down`);
-          }
-        } else if (prevErrors.has(key)) {
-          resolveLog(infra.name, 'Infra');
-        }
-      });
-
-      saveActiveErrors(currentErrors);
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {

@@ -43,18 +43,23 @@ func SendTelegramNotification(log models.Log) {
 
 	apiUrl := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
 
+	header := "🚨 *LOG KRITIS JARINGAN*"
+	if log.Severity == "info" {
+		header = "✅ *STATUS KEMBALI NORMAL*"
+	}
+
 	// Format pesan dengan tambahan informasi pelanggan dan lokasi
 	text := fmt.Sprintf(
-		"🚨 *LOG KRITIS JARINGAN*\n"+
+		"%s\n"+
 			"━━━━━━━━━━━━━━━━━━\n"+
-			"📌 *MAC Address*: `%s` \n"+
+			"📌 *Identitas*: `%s` \n"+
 			"⚠️ *Level*: %s\n"+
-			"🔌 *Perangkat*: %s\n"+
+			"🔌 *Sumber*: %s\n"+
 			"👤 *Pelanggan*: %s\n"+
 			"📍 *Lokasi*: %s\n"+
 			"📝 *Detail*: %s\n"+
 			"━━━━━━━━━━━━━━━━━━",
-		log.Title, string(log.Severity), string(log.Source), namaPelanggan, lokasiTeks, log.Message,
+		header, log.Title, string(log.Severity), string(log.Source), namaPelanggan, lokasiTeks, log.Message,
 	)
 
 	payload := map[string]interface{}{

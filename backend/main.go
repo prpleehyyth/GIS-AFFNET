@@ -53,6 +53,7 @@ func main() {
 
             protected.GET("/test-notif", controllers.TestBulkTelegram)
             protected.GET("/pppoe-active", controllers.GetPPPoEActive)
+            protected.POST("/test-onu-scenario", controllers.TestOnuScenario)
         }
     }
 

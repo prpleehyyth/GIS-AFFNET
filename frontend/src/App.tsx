@@ -9,6 +9,7 @@ import Logs from '@/pages/logs/Logs';
 import MapPage from '@/pages/map/MapPage';
 import Odp from '@/pages/odp/Odp';
 import Onu from '@/pages/onu/Onu';
+import TestPanel from '@/pages/test/TestPanel';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // PERBAIKAN: Baca dari Local Storage
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/map" element={<MapPage />} />
           <Route path="/odp" element={<Odp />} />
           <Route path="/onu" element={<Onu />} />
+          <Route path="/test-panel" element={<TestPanel />} />
         </Route>
       </Routes>
     </BrowserRouter>
