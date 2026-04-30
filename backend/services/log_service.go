@@ -44,10 +44,25 @@ func RecordLog(severity models.LogSeverity, source models.LogSource, title strin
 }
 // ResolveLog auto resolves a log
 func ResolveLog(title string, source models.LogSource) {
-	config.DB.Model(&models.Log{}).
-		Where("title = ? AND source = ? AND resolved = false", title, source).
-		Updates(map[string]interface{}{
+	var logsToResolve []models.Log
+	config.DB.Where("title = ? AND source = ? AND resolved = false", title, source).Find(&logsToResolve)
+
+	if len(logsToResolve) == 0 {
+		return
+	}
+
+	now := time.Now()
+	for _, l := range logsToResolve {
+		config.DB.Model(&l).Updates(map[string]interface{}{
 			"resolved":    true,
-			"resolved_at": time.Now(),
+			"resolved_at": now,
 		})
+
+		RecordLog("info", source, "Resolved: "+title, "Status telah kembali normal. "+l.Message)
+	}
+}
+
+// CleanOldLogs menghapus log yang usianya lebih dari 30 hari
+func CleanOldLogs() {
+	config.DB.Where("created_at < ?", time.Now().AddDate(0, 0, -30)).Delete(&models.Log{})
 }

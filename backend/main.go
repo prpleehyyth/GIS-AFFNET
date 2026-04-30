@@ -4,6 +4,7 @@ import (
 	"affnet-backend/config"
 	"affnet-backend/controllers"
 	"affnet-backend/middlewares" // Import folder middleware kamu
+	"affnet-backend/services"
 	"fmt"
 	"time"
 
@@ -62,7 +63,7 @@ func main() {
 	// 5. Jalankan Background Cron Job untuk Auto-Sync Zabbix
 	go func() {
 		// Sync setiap 2 menit (bisa diubah sesuai kebutuhan)
-		ticker := time.NewTicker(2 * time.Minute)
+		ticker := time.NewTicker(5 * time.Minute)
 		for range ticker.C {
 			fmt.Println("[CRON] Menjalankan auto-sync Zabbix & MikroTik...")
 
@@ -80,6 +81,20 @@ func main() {
 		}
 	}()
 
-	// 6. Jalankan Server
+	// 6. Jalankan Background Cron Job untuk Pembersihan Log (Retention 30 Hari)
+	go func() {
+		// Jalankan sekali saat startup
+		services.CleanOldLogs()
+		
+		// Kemudian jalankan setiap 24 jam
+		ticker := time.NewTicker(24 * time.Hour)
+		for range ticker.C {
+			fmt.Println("[CRON] Menjalankan pembersihan log lama...")
+			services.CleanOldLogs()
+			fmt.Println("[CRON] Pembersihan log selesai.")
+		}
+	}()
+
+	// 7. Jalankan Server
 	r.Run("0.0.0.0:8080")
 }

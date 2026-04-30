@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState, useCallback } from 'react';
 import {
-  fetchLogs, resolveLogById, deleteLog, clearResolvedLogs,
-  LogEntry, LogSeverity, LogSource,
+  fetchLogs,
+  LogEntry
 } from '@/lib/logService';
 import { LogFilterBar, LogTable } from './components';
 import styles from './logs.module.css';
@@ -17,7 +17,6 @@ export default function LogsPage() {
   const [loading,  setLoading]  = useState(true);
   const [severity, setSeverity] = useState('');
   const [source,   setSource]   = useState('');
-  const [resolved, setResolved] = useState('');
   const [search,   setSearch]   = useState('');
 
   const refresh = useCallback(async () => {
@@ -25,7 +24,7 @@ export default function LogsPage() {
       const params: Record<string, string> = {};
       if (severity) params.severity = severity;
       if (source)   params.source   = source;
-      if (resolved) params.resolved = resolved;
+      // We don't fetch by 'resolved' anymore for the simple viewer
       const data = await fetchLogs(params as any);
       setLogs(data);
     } catch (e) {
@@ -33,24 +32,11 @@ export default function LogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [severity, source, resolved]);
+  }, [severity, source]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleResolve = async (id: number) => {
-    await resolveLogById(id);
-    refresh();
-  };
 
-  const handleDelete = async (id: number) => {
-    await deleteLog(id);
-    refresh();
-  };
-
-  const handleClearResolved = async () => {
-    await clearResolvedLogs();
-    refresh();
-  };
 
   // Filter search di client side
   const filtered = logs.filter(l =>
@@ -60,9 +46,9 @@ export default function LogsPage() {
   );
 
   // Stats
-  const activeCount   = logs.filter(l => !l.resolved).length;
-  const criticalCount = logs.filter(l => !l.resolved && l.severity === 'critical').length;
-  const resolvedCount = logs.filter(l => l.resolved).length;
+  const criticalCount = logs.filter(l => l.severity === 'critical').length;
+  const warningCount  = logs.filter(l => l.severity === 'warning').length;
+  const infoCount     = logs.filter(l => l.severity === 'info').length;
 
   return (
     <div className={styles.page}>
@@ -72,7 +58,7 @@ export default function LogsPage() {
         <div className={styles.headerLeft}>
           <div className={styles.headerIcon}>📋</div>
           <div>
-            <div className={styles.headerTitle}>Event Logs</div>
+            <div className={styles.headerTitle}>System Logs</div>
             <div className={styles.headerSub}>Riwayat kejadian jaringan dari semua sumber</div>
           </div>
         </div>
@@ -86,25 +72,24 @@ export default function LogsPage() {
           <div className={styles.statValue}>{logs.length}</div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statLabel}>Aktif</div>
-          <div className={`${styles.statValue} ${styles.red}`}>{activeCount}</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Kritis Aktif</div>
+          <div className={styles.statLabel}>Kritis</div>
           <div className={`${styles.statValue} ${styles.red}`}>{criticalCount}</div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statLabel}>Resolved</div>
-          <div className={`${styles.statValue} ${styles.green}`}>{resolvedCount}</div>
+          <div className={styles.statLabel}>Warning</div>
+          <div className={`${styles.statValue} ${styles.orange}`}>{warningCount}</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Info</div>
+          <div className={`${styles.statValue} ${styles.blue}`}>{infoCount}</div>
         </div>
       </div>
 
       {/* Filter */}
       <LogFilterBar
-        severity={severity} source={source} resolved={resolved} search={search}
+        severity={severity} source={source} search={search}
         onSeverity={setSeverity} onSource={setSource}
-        onResolved={setResolved} onSearch={setSearch}
-        onClearResolved={handleClearResolved}
+        onSearch={setSearch}
         totalCount={filtered.length}
       />
 
@@ -112,7 +97,7 @@ export default function LogsPage() {
       {loading ? (
         <div className={styles.loading}>Memuat log...</div>
       ) : (
-        <LogTable logs={filtered} onResolve={handleResolve} onDelete={handleDelete} />
+        <LogTable logs={filtered} />
       )}
     </div>
   );

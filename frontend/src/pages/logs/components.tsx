@@ -28,20 +28,17 @@ export function logTimestamp(d: string): string {
 interface FilterProps {
   severity: string;
   source: string;
-  resolved: string;
   search: string;
   onSeverity: (v: string) => void;
   onSource:   (v: string) => void;
-  onResolved: (v: string) => void;
   onSearch:   (v: string) => void;
-  onClearResolved: () => void;
   totalCount: number;
 }
 
 export function LogFilterBar({
-  severity, source, resolved, search,
-  onSeverity, onSource, onResolved, onSearch,
-  onClearResolved, totalCount,
+  severity, source, search,
+  onSeverity, onSource, onSearch,
+  totalCount,
 }: FilterProps) {
   return (
     <div className={styles.filterWrap}>
@@ -68,18 +65,6 @@ export function LogFilterBar({
             {s === '' ? 'Semua Sumber' : `${SRC[s as LogSource].emoji} ${s}`}
           </button>
         ))}
-
-        <div className={styles.filterDivider} />
-
-        {/* Resolved */}
-        {([['', 'Semua Status'], ['false', 'Aktif'], ['true', 'Resolved']] as const).map(([v, label]) => (
-          <button key={v}
-            className={`${styles.filterBtn} ${resolved === v ? styles.filterBtnActive : ''}`}
-            onClick={() => onResolved(v)}
-          >
-            {label}
-          </button>
-        ))}
       </div>
 
       <div className={styles.filterRight}>
@@ -89,9 +74,6 @@ export function LogFilterBar({
           value={search}
           onChange={e => onSearch(e.target.value)}
         />
-        <button className={styles.clearBtn} onClick={onClearResolved}>
-          Hapus Resolved
-        </button>
       </div>
     </div>
   );
@@ -100,11 +82,9 @@ export function LogFilterBar({
 // ── Log table ─────────────────────────────────────────────────
 interface TableProps {
   logs: LogEntry[];
-  onResolve: (id: number) => void;
-  onDelete:  (id: number) => void;
 }
 
-export function LogTable({ logs, onResolve, onDelete }: TableProps) {
+export function LogTable({ logs }: TableProps) {
   if (logs.length === 0) {
     return (
       <div className={styles.empty}>
@@ -124,23 +104,19 @@ export function LogTable({ logs, onResolve, onDelete }: TableProps) {
             <th>Sumber</th>
             <th>Judul</th>
             <th>Pesan</th>
-            <th>Status</th>
-            <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
           {logs.map(log => {
             const sev = SEV[log.severity];
             const src = SRC[log.source];
+            // Do not show resolve button if it's already resolved or it's an info event
+            const showResolve = !log.resolved && !log.title.startsWith('Resolved:');
+
             return (
-              <tr key={log.id} className={log.resolved ? styles.rowResolved : ''}>
+              <tr key={log.id}>
                 <td>
                   <span className={styles.timestamp}>{logTimestamp(log.created_at)}</span>
-                  {log.resolved && log.resolved_at && (
-                    <span className={styles.resolvedAt}>
-                      ✓ {logTimestamp(log.resolved_at)}
-                    </span>
-                  )}
                 </td>
                 <td>
                   <span className={styles.sevBadge}
@@ -155,23 +131,6 @@ export function LogTable({ logs, onResolve, onDelete }: TableProps) {
                 </td>
                 <td><span className={styles.logTitle}>{log.title}</span></td>
                 <td><span className={styles.logMsg}>{log.message}</span></td>
-                <td>
-                  {log.resolved
-                    ? <span className={styles.statusResolved}>Resolved</span>
-                    : <span className={styles.statusActive}>Aktif</span>}
-                </td>
-                <td>
-                  <div className={styles.actions}>
-                    {!log.resolved && (
-                      <button className={styles.resolveBtn} onClick={() => onResolve(log.id)}>
-                        ✓ Resolve
-                      </button>
-                    )}
-                    <button className={styles.deleteBtn} onClick={() => onDelete(log.id)}>
-                      🗑
-                    </button>
-                  </div>
-                </td>
               </tr>
             );
           })}

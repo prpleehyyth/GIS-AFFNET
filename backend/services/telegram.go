@@ -26,8 +26,14 @@ func SendTelegramNotification(log models.Log) {
 
 	// Mencari data ONU berdasarkan MAC Address yang ada di log.Title
 	if log.Source == "ONU" {
+		macAddress := log.Title
+		// Hapus prefix "Resolved: " jika ada, agar pencarian MAC Address tetap akurat
+		if len(macAddress) > 10 && macAddress[:10] == "Resolved: " {
+			macAddress = macAddress[10:]
+		}
+
 		var onu models.Onu
-		if err := config.DB.Where("mac_address = ?", log.Title).First(&onu).Error; err == nil {
+		if err := config.DB.Where("mac_address = ?", macAddress).First(&onu).Error; err == nil {
 			// Mengambil nama pelanggan dari field Customer
 			if onu.Customer != "" {
 				namaPelanggan = onu.Customer

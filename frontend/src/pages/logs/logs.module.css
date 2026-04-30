@@ -28,8 +28,10 @@
 }
 .statLabel { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
 .statValue { font-size: 26px; font-weight: 700; color: var(--text-primary); margin-top: 4px; font-family: var(--mono); }
-.green { color: var(--green); }
-.red   { color: var(--red); }
+.green { color: var(--green, #10b981); }
+.red   { color: var(--red, #ef4444); }
+.orange { color: #d97706; }
+.blue  { color: #0284c7; }
 
 /* ── FILTER BAR ───────────────────────── */
 .filterWrap {
@@ -93,7 +95,6 @@
 }
 .table tr:last-child td { border-bottom: none; }
 .table tbody tr:hover td { background: var(--bg); }
-.rowResolved td { opacity: 0.55; }
 
 /* ── CELLS ────────────────────────────── */
 .timestamp  { font-family: var(--mono); font-size: 11px; color: var(--text-primary); display: block; }
@@ -108,24 +109,7 @@
 .logTitle { font-weight: 600; color: var(--text-primary); }
 .logMsg   { color: var(--text-secondary); font-size: 12px; }
 
-.statusActive   { font-size: 11px; font-weight: 700; color: var(--red);   background: var(--red-soft);   border: 1px solid var(--red-border);   padding: 2px 9px; border-radius: 20px; }
-.statusResolved { font-size: 11px; font-weight: 700; color: var(--green); background: var(--green-soft); border: 1px solid var(--green-border); padding: 2px 9px; border-radius: 20px; }
 
-.actions { display: flex; gap: 6px; }
-.resolveBtn {
-  padding: 5px 10px; border: 1px solid var(--green-border);
-  background: var(--green-soft); color: var(--green);
-  border-radius: var(--radius-sm); font-size: 11px; font-weight: 600;
-  font-family: var(--font); cursor: pointer; transition: all 0.15s; white-space: nowrap;
-}
-.resolveBtn:hover { background: #dcfce7; }
-.deleteBtn {
-  padding: 5px 8px; border: 1px solid var(--border);
-  background: var(--surface-2); color: var(--text-muted);
-  border-radius: var(--radius-sm); font-size: 11px;
-  font-family: var(--font); cursor: pointer; transition: all 0.15s;
-}
-.deleteBtn:hover { background: var(--red-soft); color: var(--red); border-color: var(--red-border); }
 
 /* ── EMPTY & LOADING ──────────────────── */
 .empty {

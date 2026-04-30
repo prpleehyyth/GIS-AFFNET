@@ -98,7 +98,18 @@ func ResolveLog(c *gin.Context) {
 	id := c.Param("id")
 	now := time.Now()
 
-	if err := config.DB.Model(&models.Log{}).Where("id = ?", id).Updates(map[string]interface{}{
+	var oldLog models.Log
+	if err := config.DB.First(&oldLog, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Log tidak ditemukan"})
+		return
+	}
+
+	if oldLog.Resolved {
+		c.JSON(http.StatusOK, gin.H{"message": "Log sudah resolved"})
+		return
+	}
+
+	if err := config.DB.Model(&oldLog).Updates(map[string]interface{}{
 		"resolved":    true,
 		"resolved_at": now,
 	}).Error; err != nil {
@@ -106,7 +117,10 @@ func ResolveLog(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Log ditandai resolved"})
+	// Buat log baru sebagai penanda resolved dan kirim notifikasi
+	services.RecordLog("info", oldLog.Source, "Resolved: "+oldLog.Title, "Status telah kembali normal. "+oldLog.Message)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Log ditandai resolved dan log baru dibuat"})
 }
 
 // ResolveLogByTitle — resolve semua log aktif dengan title tertentu
@@ -121,15 +135,23 @@ func ResolveLogByTitle(c *gin.Context) {
 		return
 	}
 
+	var logsToResolve []models.Log
+	config.DB.Where("title = ? AND source = ? AND resolved = false", input.Title, input.Source).Find(&logsToResolve)
+
+	if len(logsToResolve) == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "Tidak ada log aktif untuk di-resolve"})
+		return
+	}
+
 	now := time.Now()
-	if err := config.DB.Model(&models.Log{}).
-		Where("title = ? AND source = ? AND resolved = false", input.Title, input.Source).
-		Updates(map[string]interface{}{
+	for _, l := range logsToResolve {
+		config.DB.Model(&l).Updates(map[string]interface{}{
 			"resolved":    true,
 			"resolved_at": now,
-		}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal resolve log"})
-		return
+		})
+
+		// Buat log baru sebagai penanda resolved dan kirim notifikasi
+		services.RecordLog("info", l.Source, "Resolved: "+l.Title, "Status telah kembali normal.")
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Log berhasil di-resolve"})
