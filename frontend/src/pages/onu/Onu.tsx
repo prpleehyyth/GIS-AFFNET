@@ -13,6 +13,7 @@ export default function OnuPage() {
   const [selectedOnu, setSelectedOnu] = useState<Onu | null>(null);
   const [form,        setForm]        = useState<OnuForm>({ customer: '', latitude: '', longitude: '', odp_id: '' });
   const [isLoading,   setIsLoading]   = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // ── Fetch ──────────────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -21,6 +22,7 @@ export default function OnuPage() {
     const odpData = await odpRes.json();
     setOnus(Array.isArray(onuData) ? onuData : (onuData.result || []));
     setOdps(Array.isArray(odpData) ? odpData : (odpData.result || []));
+    setLastUpdated(new Date());
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -88,7 +90,14 @@ export default function OnuPage() {
           <div className={styles.headerIcon}>🗄️</div>
           <div>
             <div className={styles.headerTitle}>Manajemen ONU</div>
-            <div className={styles.headerSub}>Optical Network Unit — Kelola data dan lokasi perangkat pelanggan</div>
+            <div className={styles.headerSub}>
+              Optical Network Unit — Kelola data dan lokasi perangkat pelanggan
+              {lastUpdated && (
+                <span style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, border: '1px solid #bbf7d0' }}>
+                  <span>🔄</span> {lastUpdated.toLocaleTimeString('id-ID')}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <Link to="/map" className={styles.backBtn}>← Kembali ke Peta</Link>

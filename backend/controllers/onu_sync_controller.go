@@ -109,7 +109,7 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 		Jsonrpc: "2.0",
 		Method:  "item.get",
 		Params: map[string]interface{}{
-			"output":      []string{"itemid", "name", "key_", "lastvalue", "units"},
+			"output":      []string{"itemid", "name", "key_", "lastvalue", "units", "lastclock"},
 			"search":      map[string]string{"name": "Redaman ONU"},
 			"startSearch": true,
 		},
@@ -136,6 +136,7 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 			Key       string `json:"key_"`
 			Lastvalue string `json:"lastvalue"`
 			Units     string `json:"units"`
+			Lastclock string `json:"lastclock"`
 		} `json:"result"`
 		Error *struct {
 			Message string `json:"message"`
@@ -162,48 +163,59 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 			continue
 		}
 
+		rxPowerVal := item.Lastvalue
+		statusVal := "Online"
+
+		// Jika item belum pernah mendapatkan data atau bernilai 0
+		if item.Lastclock == "0" || item.Lastvalue == "0" || item.Lastvalue == "0.0000" || item.Lastvalue == "" {
+			rxPowerVal = "N/A"
+			statusVal = "Koneksi terputus"
+		}
+
 		lookupKey := normalizeMac(dbMac)
 		customerName := macToCustomer[lookupKey]
 		if customerName != "" {
 			countCustomer++
 		}
 
-		rxPowerFloat, errParse := strconv.ParseFloat(item.Lastvalue, 64)
-		if errParse == nil {
-			if rxPowerFloat < batasKritis {
-				var existingLog models.Log
-				errLog := config.DB.
-					Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
-					First(&existingLog).Error
+		if rxPowerVal != "N/A" {
+			rxPowerFloat, errParse := strconv.ParseFloat(rxPowerVal, 64)
+			if errParse == nil {
+				if rxPowerFloat < batasKritis {
+					var existingLog models.Log
+					errLog := config.DB.
+						Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
+						First(&existingLog).Error
 
-				if errLog != nil {
-					pesan := fmt.Sprintf("Sinyal kritis: %s dBm (batas: %.0f dBm)", item.Lastvalue, batasKritis)
-					if customerName != "" {
-						pesan += fmt.Sprintf(" | Pelanggan: %s", customerName)
+					if errLog != nil {
+						pesan := fmt.Sprintf("Sinyal kritis: %s dBm (batas: %.0f dBm)", rxPowerVal, batasKritis)
+						if customerName != "" {
+							pesan += fmt.Sprintf(" | Pelanggan: %s", customerName)
+						}
+						newLog := models.Log{
+							Severity: "critical",
+							Source:   "ONU",
+							Title:    dbMac,
+							Message:  pesan,
+						}
+						config.DB.Create(&newLog)
+						go services.SendTelegramNotification(newLog)
 					}
-					newLog := models.Log{
-						Severity: "critical",
-						Source:   "ONU",
-						Title:    dbMac,
-						Message:  pesan,
+				} else {
+					res := config.DB.Model(&models.Log{}).
+						Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
+						Updates(map[string]interface{}{
+							"resolved":    true,
+							"resolved_at": time.Now(),
+						})
+					
+					if res.RowsAffected > 0 {
+						msgInfo := "Sinyal ONU kembali normal (Up)"
+						if customerName != "" {
+							msgInfo += fmt.Sprintf(" | Pelanggan: %s", customerName)
+						}
+						services.RecordLog("info", "ONU", dbMac, msgInfo)
 					}
-					config.DB.Create(&newLog)
-					go services.SendTelegramNotification(newLog)
-				}
-			} else {
-				res := config.DB.Model(&models.Log{}).
-					Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
-					Updates(map[string]interface{}{
-						"resolved":    true,
-						"resolved_at": time.Now(),
-					})
-				
-				if res.RowsAffected > 0 {
-					msgInfo := "Sinyal ONU kembali normal (Up)"
-					if customerName != "" {
-						msgInfo += fmt.Sprintf(" | Pelanggan: %s", customerName)
-					}
-					services.RecordLog("info", "ONU", dbMac, msgInfo)
 				}
 			}
 		}
@@ -213,8 +225,8 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 
 		if result.RowsAffected > 0 {
 			updateData := map[string]interface{}{
-				"rx_power": item.Lastvalue,
-				"status":   "Online",
+				"rx_power": rxPowerVal,
+				"status":   statusVal,
 			}
 			if customerName != "" {
 				updateData["customer"] = customerName
@@ -224,8 +236,8 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 		} else {
 			config.DB.Create(&models.Onu{
 				MacAddress: dbMac,
-				RxPower:    item.Lastvalue,
-				Status:     "Online",
+				RxPower:    rxPowerVal,
+				Status:     statusVal,
 				Customer:   customerName,
 			})
 			

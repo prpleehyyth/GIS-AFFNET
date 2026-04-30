@@ -103,6 +103,9 @@ export default function MapView() {
   const [onus,   setOnus]           = useState<Onu[]>([]);
   const [infras, setInfras]         = useState<Infra[]>([]);
   const [odps,   setOdps]           = useState<Odp[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [onuFilter, setOnuFilter]   = useState<'all' | 'ok' | 'warning' | 'critical' | 'disconnected'>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(true);
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -122,6 +125,7 @@ export default function MapView() {
       setOnus  (allOnus  .filter((o: Onu)   => o.latitude && o.longitude));
       setInfras(allInfras.filter((i: Infra) => i.inventory?.location_lat && i.inventory?.location_lon));
       setOdps  (allOdps  .filter((o: Odp)   => o.latitude && o.longitude));
+      setLastUpdated(new Date());
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {
@@ -146,6 +150,73 @@ export default function MapView() {
 
   return (
     <div className={styles.mapWrap} style={{ position: 'relative' }}>
+
+      {/* Timestamp & Filter Overlay */}
+      <div style={{
+        position: 'absolute', top: 15, left: 60, zIndex: 1000,
+        display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start'
+      }}>
+        {/* Last updated */}
+        <div style={{
+          background: 'rgba(255,255,255,0.95)', padding: '8px 14px', borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: 12, fontWeight: 600,
+          fontFamily: "'Plus Jakarta Sans',sans-serif", color: '#4b5563',
+          border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 6,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <span style={{ fontSize: 14 }}>🔄</span>
+          <span>Terakhir diperbarui: {lastUpdated ? lastUpdated.toLocaleTimeString('id-ID') : '...'}</span>
+        </div>
+
+        {/* ONU Filter */}
+        <div style={{
+          background: 'rgba(255,255,255,0.95)', padding: '10px 12px', borderRadius: 10,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e5e7eb',
+          fontFamily: "'Plus Jakarta Sans',sans-serif", display: 'flex', flexDirection: 'column', gap: 8,
+          backdropFilter: 'blur(4px)', transition: 'all 0.3s ease',
+          minWidth: '200px'
+        }}>
+          <div 
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            style={{ 
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+              cursor: 'pointer', padding: '0 4px'
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Filter Kondisi ONU
+            </div>
+            <div style={{ color: '#9ca3af', fontSize: 16, lineHeight: 1 }}>
+              {isFilterOpen ? '▾' : '▸'}
+            </div>
+          </div>
+          
+          {isFilterOpen && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-start', marginTop: 4 }}>
+              {(['all', 'ok', 'warning', 'critical', 'disconnected'] as const).map(f => {
+                const labels = { all: 'Semua', ok: 'Aman', warning: 'Warning', critical: 'Kritis', disconnected: 'Terputus' };
+                const colors = { all: '#4b5563', ok: '#16a34a', warning: '#d97706', critical: '#ef4444', disconnected: '#b91c1c' };
+                const bgColors = { all: '#f3f4f6', ok: '#f0fdf4', warning: '#fffbeb', critical: '#fef2f2', disconnected: '#fee2e2' };
+                const active = onuFilter === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setOnuFilter(f)}
+                    style={{
+                      padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                      background: active ? colors[f] : bgColors[f],
+                      color: active ? 'white' : colors[f],
+                      border: `1px solid ${active ? colors[f] : '#e5e7eb'}`, transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {labels[f]}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Loading overlay */}
       {isLoading && (
@@ -214,11 +285,27 @@ export default function MapView() {
         })}
 
         {/* ── Drop: ODP → ONU ───────────────────────────────── */}
-        {onus.filter(o => o.odp_id).map(onu => {
+        {onus.filter(onu => {
+          if (!onu.odp_id) return false;
+          const rx = parseFloat(onu.rx_power);
+          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
+          if (onuFilter === 'disconnected') return isDisconnected;
+          if (isDisconnected && onuFilter !== 'all') return false;
+
+          const isCritical = !isDisconnected && rx <= -27;
+          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
+          const isOk       = !isDisconnected && rx > -25;
+          
+          if (onuFilter === 'ok') return isOk;
+          if (onuFilter === 'warning') return isWarning;
+          if (onuFilter === 'critical') return isCritical;
+          return true;
+        }).map(onu => {
           const parent = odps.find(o => o.id === onu.odp_id);
           if (!parent) return null;
           const rx    = parseFloat(onu.rx_power);
-          const color = rx <= -27 ? '#EF4444' : rx <= -25 ? '#F59E0B' : '#22C55E';
+          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
+          const color = isDisconnected ? '#b91c1c' : rx <= -27 ? '#EF4444' : rx <= -25 ? '#F59E0B' : '#22C55E';
           return (
             <Polyline
               key={`drop-${onu.id}`}
@@ -226,7 +313,7 @@ export default function MapView() {
                 [parseFloat(parent.latitude), parseFloat(parent.longitude)],
                 [parseFloat(onu.latitude),    parseFloat(onu.longitude)],
               ]}
-              pathOptions={{ color, weight: 2, opacity: 0.75 }}
+              pathOptions={{ color, weight: 2, opacity: 0.75, dashArray: isDisconnected ? '5,5' : undefined }}
             />
           );
         })}
@@ -378,12 +465,27 @@ export default function MapView() {
         })}
 
         {/* ── Marker: ONU ───────────────────────────────────── */}
-        {onus.map(onu => {
+        {onus.filter(onu => {
+          const rx = parseFloat(onu.rx_power);
+          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
+          if (onuFilter === 'disconnected') return isDisconnected;
+          if (isDisconnected && onuFilter !== 'all') return false;
+
+          const isCritical = !isDisconnected && rx <= -27;
+          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
+          const isOk       = !isDisconnected && rx > -25;
+          
+          if (onuFilter === 'ok') return isOk;
+          if (onuFilter === 'warning') return isWarning;
+          if (onuFilter === 'critical') return isCritical;
+          return true;
+        }).map(onu => {
           const rx         = parseFloat(onu.rx_power);
-          const isCritical = rx <= -27;
-          const isWarning  = rx > -27 && rx <= -25;
-          const level      = isCritical ? 'critical' : isWarning ? 'warning' : 'ok';
-          const rxColor    = isCritical ? '#EF4444'  : isWarning ? '#D97706' : '#16A34A';
+          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
+          const isCritical = !isDisconnected && rx <= -27;
+          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
+          const level      = isDisconnected ? 'critical' : isCritical ? 'critical' : isWarning ? 'warning' : 'ok';
+          const rxColor    = isDisconnected ? '#b91c1c' : isCritical ? '#EF4444'  : isWarning ? '#D97706' : '#16A34A';
 
           return (
             <Marker
@@ -396,7 +498,7 @@ export default function MapView() {
                   <div style={pp.head}>
                     <div style={{
                       ...pp.icon,
-                      background: isCritical ? '#FFF1F2' : isWarning ? '#FFFBEB' : '#F0FDF4',
+                      background: isDisconnected ? '#fee2e2' : isCritical ? '#FFF1F2' : isWarning ? '#FFFBEB' : '#F0FDF4',
                     }}>
                       🏠
                     </div>
@@ -412,8 +514,10 @@ export default function MapView() {
                   <div style={pp.row}>
                     <span style={pp.lbl}>Redaman (Rx)</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <SignalBars rx={rx} />
-                      <span style={{ ...pp.val, color: rxColor }}>{onu.rx_power} dBm</span>
+                      {!isDisconnected && <SignalBars rx={rx} />}
+                      <span style={{ ...pp.val, color: rxColor }}>
+                        {isDisconnected ? 'N/A (Terputus)' : `${onu.rx_power} dBm`}
+                      </span>
                     </div>
                   </div>
                   <div style={pp.row}>
@@ -421,10 +525,10 @@ export default function MapView() {
                     <span style={{
                       ...pp.badge,
                       color:      rxColor,
-                      background: isCritical ? '#FFF1F2' : isWarning ? '#FFFBEB' : '#F0FDF4',
-                      border:     `1px solid ${isCritical ? '#FECACA' : isWarning ? '#FDE68A' : '#BBF7D0'}`,
+                      background: isDisconnected ? '#fee2e2' : isCritical ? '#FFF1F2' : isWarning ? '#FFFBEB' : '#F0FDF4',
+                      border:     `1px solid ${isDisconnected ? '#fca5a5' : isCritical ? '#FECACA' : isWarning ? '#FDE68A' : '#BBF7D0'}`,
                     }}>
-                      {isCritical ? 'Kritis' : isWarning ? 'Warning' : 'Aman'}
+                      {isDisconnected ? 'Terputus' : isCritical ? 'Kritis' : isWarning ? 'Warning' : 'Aman'}
                     </span>
                   </div>
                   {onu.odp_id && (

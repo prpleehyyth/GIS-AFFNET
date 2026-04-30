@@ -8,6 +8,8 @@ export interface Onu {
   latitude: string;
   longitude: string;
   rx_power: string;
+  status?: string;
+  updated_at?: string;
   odp_id?: number | null;
 }
 export interface Odp {

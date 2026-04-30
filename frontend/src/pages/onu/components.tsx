@@ -124,17 +124,26 @@ export function OnuTable({ onus, filterMode, onFilterChange, totalCount, onEdit 
                 </td>
               </tr>
             ) : onus.map(onu => {
+              const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
               const rxVal      = parseFloat(onu.rx_power);
-              const isWeak     = rxVal <= -25;
+              const isWeak     = !isDisconnected && rxVal <= -25;
               const hasLocation = !!onu.latitude && !!onu.longitude;
+              const rowStyle = isDisconnected ? { backgroundColor: '#fee2e2' } : {};
+              
               return (
-                <tr key={onu.id}>
+                <tr key={onu.id} style={rowStyle}>
                   <td><span className={styles.macCell}>{onu.mac_address}</span></td>
                   <td><span className={styles.customerName}>{onu.customer || '—'}</span></td>
                   <td>
-                    <span className={isWeak ? styles.rxWeak : styles.rxOk}>
-                      {onu.rx_power} dBm
-                    </span>
+                    {isDisconnected ? (
+                      <span className={styles.rxWeak} style={{ color: '#b91c1c' }}>
+                        N/A (Terputus)
+                      </span>
+                    ) : (
+                      <span className={isWeak ? styles.rxWeak : styles.rxOk}>
+                        {onu.rx_power} dBm
+                      </span>
+                    )}
                   </td>
                   <td>
                     {hasLocation
