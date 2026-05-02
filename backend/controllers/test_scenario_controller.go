@@ -16,7 +16,7 @@ import (
 func TestOnuScenario(c *gin.Context) {
 	var input struct {
 		Scenario   int    `json:"scenario" binding:"required"`
-		MacAddress string `json:"mac_address"` // Default AA:BB:CC:11:22:33 jika kosong
+		MacAddress string `json:"mac_address"` // Default 44:22:95:49:71:68 jika kosong
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -26,7 +26,7 @@ func TestOnuScenario(c *gin.Context) {
 
 	mac := input.MacAddress
 	if mac == "" {
-		mac = "AA:BB:CC:11:22:33"
+		mac = "44:22:95:49:71:68"
 	}
 
 	switch input.Scenario {
@@ -34,7 +34,7 @@ func TestOnuScenario(c *gin.Context) {
 		// Skenario 1: Perangkat ONU dimatikan (RX Power drop jadi -30 dBm)
 		pesan := fmt.Sprintf("Sinyal kritis: -30.0 dBm (batas: -25 dBm) | Simulasi Testing")
 		
-		// Cek apakah log sudah ada biar gak dobel
+		
 		var existingLog models.Log
 		err := config.DB.Where("title = ? AND source = ? AND resolved = false", mac, "ONU").First(&existingLog).Error
 		
@@ -49,7 +49,7 @@ func TestOnuScenario(c *gin.Context) {
 			go services.SendTelegramNotification(newLog)
 		}
 
-		// Update database ONU kalau ada
+		
 		config.DB.Model(&models.Onu{}).Where("mac_address = ?", mac).Updates(map[string]interface{}{
 			"rx_power": "-30.0",
 		})

@@ -28,7 +28,7 @@ export default function TestPanel() {
       const res = await fetch("/api/test-onu-scenario", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ scenario: scenarioId, mac_address: "AA:BB:CC:11:22:33" })
+        body: JSON.stringify({ scenario: scenarioId, mac_address: "44:22:95:49:71:68" })
       });
       const data = await res.json();
       alert(`Hasil:\n${data.message || data.error}`);
