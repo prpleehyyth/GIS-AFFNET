@@ -125,7 +125,15 @@ export default function MapView() {
       setOnus  (allOnus  .filter((o: Onu)   => o.latitude && o.longitude));
       setInfras(allInfras.filter((i: Infra) => i.inventory?.location_lat && i.inventory?.location_lon));
       setOdps  (allOdps  .filter((o: Odp)   => o.latitude && o.longitude));
-      setLastUpdated(new Date());
+      
+      let latest = 0;
+      allOnus.forEach((o: any) => {
+        if (o.updated_at) {
+          const t = new Date(o.updated_at).getTime();
+          if (t > latest) latest = t;
+        }
+      });
+      setLastUpdated(latest > 0 ? new Date(latest) : new Date());
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {

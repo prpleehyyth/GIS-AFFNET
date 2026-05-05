@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [odcs, setOdcs] = useState<Odp[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [infraError, setInfraError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
 
@@ -33,6 +34,15 @@ export default function Dashboard() {
       const rawInfras = Array.isArray(infraData) ? infraData : (infraData.result || []);
       const rawOdps = Array.isArray(odpData) ? odpData : (odpData.result || []);
       const rawOnus = Array.isArray(onuData) ? onuData : (onuData.result || []);
+
+      let latest = 0;
+      rawOnus.forEach((o: any) => {
+        if (o.updated_at) {
+          const t = new Date(o.updated_at).getTime();
+          if (t > latest) latest = t;
+        }
+      });
+      setLastUpdated(latest > 0 ? new Date(latest) : new Date());
 
       setOnus(rawOnus);
       setInfras(rawInfras);
@@ -94,7 +104,7 @@ export default function Dashboard() {
         </div>
         <div className={styles.headerRight}>
           <span className={styles.lastUpdate}>
-            Diperbarui: {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+            Diperbarui: {lastUpdated ? lastUpdated.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '...'} WIB
           </span>
           <Link to="/map" className={styles.mapBtn}>Peta Jaringan →</Link>
         </div>

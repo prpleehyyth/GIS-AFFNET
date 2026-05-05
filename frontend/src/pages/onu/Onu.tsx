@@ -20,9 +20,20 @@ export default function OnuPage() {
     const [onuRes, odpRes] = await Promise.all([fetch(ONU_URL), fetch(ODP_URL)]);
     const onuData = await onuRes.json();
     const odpData = await odpRes.json();
-    setOnus(Array.isArray(onuData) ? onuData : (onuData.result || []));
-    setOdps(Array.isArray(odpData) ? odpData : (odpData.result || []));
-    setLastUpdated(new Date());
+    const rawOnus = Array.isArray(onuData) ? onuData : (onuData.result || []);
+    const rawOdps = Array.isArray(odpData) ? odpData : (odpData.result || []);
+    
+    let latest = 0;
+    rawOnus.forEach((o: any) => {
+      if (o.updated_at) {
+        const t = new Date(o.updated_at).getTime();
+        if (t > latest) latest = t;
+      }
+    });
+    setLastUpdated(latest > 0 ? new Date(latest) : new Date());
+
+    setOnus(rawOnus);
+    setOdps(rawOdps);
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);

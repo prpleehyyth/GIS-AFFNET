@@ -156,12 +156,51 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 	countCustomer := 0
 	countSkip     := 0
 
+	// Deduplicate items by MAC address to prevent flapping if Zabbix returns multiple items for the same ONU
+	type zabbixItem struct {
+		Itemid    string
+		Name      string
+		Key       string
+		Lastvalue string
+		Units     string
+		Lastclock string
+	}
+	bestItemPerMac := make(map[string]zabbixItem)
+
 	for _, item := range zabbixData.Result {
 		dbMac := extractMacAddress(item.Name)
 		if dbMac == "" {
 			countSkip++
 			continue
 		}
+
+		existing, ok := bestItemPerMac[dbMac]
+		if !ok {
+			bestItemPerMac[dbMac] = zabbixItem{
+				Itemid:    item.Itemid,
+				Name:      item.Name,
+				Key:       item.Key,
+				Lastvalue: item.Lastvalue,
+				Units:     item.Units,
+				Lastclock: item.Lastclock,
+			}
+		} else {
+			lastClock1, _ := strconv.ParseInt(item.Lastclock, 10, 64)
+			lastClock2, _ := strconv.ParseInt(existing.Lastclock, 10, 64)
+			if lastClock1 > lastClock2 {
+				bestItemPerMac[dbMac] = zabbixItem{
+					Itemid:    item.Itemid,
+					Name:      item.Name,
+					Key:       item.Key,
+					Lastvalue: item.Lastvalue,
+					Units:     item.Units,
+					Lastclock: item.Lastclock,
+				}
+			}
+		}
+	}
+
+	for dbMac, item := range bestItemPerMac {
 
 		rxPowerVal := item.Lastvalue
 		statusVal := "Online"
