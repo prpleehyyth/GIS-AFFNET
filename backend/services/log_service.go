@@ -58,7 +58,7 @@ func ResolveLog(title string, source models.LogSource) {
 			"resolved_at": now,
 		})
 
-		RecordLog("info", source, "Resolved: "+title, "Status telah kembali normal. "+l.Message)
+		RecordLog("info", source, "Resolved: "+title, "Status perangkat telah kembali normal (Isu sebelumnya: "+l.Message+")")
 	}
 }
 

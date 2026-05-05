@@ -13,6 +13,9 @@
   margin: 0 auto;
   box-sizing: border-box;
 }
+@media (max-width: 768px) {
+  .page { padding: 16px 20px; }
+}
 
 /* ── LOADING ──────────────────────────── */
 .loadingWrapper { display:flex; align-items:center; justify-content:center; gap:12px; min-height:100vh; background:var(--bg); }
@@ -20,10 +23,10 @@
 .loadingText { font-size:14px; color:var(--text-muted); }
 
 /* ── HEADER ───────────────────────────── */
-.header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px; }
+.header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px; gap: 16px; flex-wrap: wrap; }
 .eyebrow { margin:0 0 6px; font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--text-muted); text-transform:uppercase; }
 .title   { margin:0; font-size:26px; font-weight:700; color:var(--text-primary); letter-spacing:-.02em; }
-.headerRight { display:flex; align-items:center; gap:14px; }
+.headerRight { display:flex; align-items:center; gap:14px; flex-wrap: wrap; }
 .lastUpdate  { font-size:12px; color:var(--text-muted); font-family:'JetBrains Mono', monospace; }
 .mapBtn {
   font-size:13px; font-weight:600; color:var(--text-secondary);
@@ -36,6 +39,9 @@
 
 /* ── CARDS GRID ───────────────────────── */
 .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:16px; margin-bottom:28px; }
+@media (max-width: 480px) {
+  .grid { grid-template-columns: 1fr; }
+}
 
 /* ── CARD ─────────────────────────────── */
 .card {
@@ -117,6 +123,9 @@
 .quickSection { margin-top:4px; }
 .quickTitle   { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; margin:0 0 12px; }
 .quickGrid    { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:10px; }
+@media (max-width: 480px) {
+  .quickGrid { grid-template-columns: 1fr; }
+}
 .quickCard {
   display:flex; align-items:center; gap:10px;
   padding:14px 16px;

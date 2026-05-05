@@ -45,6 +45,36 @@ func SendTelegramNotification(log models.Log) {
 				lokasiTeks = fmt.Sprintf("[Lihat di Google Maps](%s)", mapsUrl)
 			}
 		}
+	} else if log.Source == "Infra" {
+		infraName := log.Title
+		if len(infraName) > 10 && infraName[:10] == "Resolved: " {
+			infraName = infraName[10:]
+		}
+		
+		namaPelanggan = "N/A (Infrastruktur Jaringan)"
+		
+		var infra models.Infra
+		if err := config.DB.Where("name = ?", infraName).First(&infra).Error; err == nil {
+			if infra.Lat != "" && infra.Lon != "" {
+				mapsUrl := fmt.Sprintf("https://www.google.com/maps?q=%s,%s", infra.Lat, infra.Lon)
+				lokasiTeks = fmt.Sprintf("[Lihat di Google Maps](%s)", mapsUrl)
+			}
+		}
+	} else if log.Source == "ODP" {
+		odpName := log.Title
+		if len(odpName) > 10 && odpName[:10] == "Resolved: " {
+			odpName = odpName[10:]
+		}
+		
+		namaPelanggan = "N/A (Perangkat Distribusi)"
+		
+		var odp models.Odp
+		if err := config.DB.Where("name = ?", odpName).First(&odp).Error; err == nil {
+			if odp.Latitude != "" && odp.Longitude != "" {
+				mapsUrl := fmt.Sprintf("https://www.google.com/maps?q=%s,%s", odp.Latitude, odp.Longitude)
+				lokasiTeks = fmt.Sprintf("[Lihat di Google Maps](%s)", mapsUrl)
+			}
+		}
 	}
 
 	apiUrl := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
