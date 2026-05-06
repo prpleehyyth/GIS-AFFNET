@@ -90,6 +90,48 @@ func GetLogs(c *gin.Context) {
 		return
 	}
 
+	// Enrich ONU titles with customer name
+	var macs []string
+	for _, l := range logs {
+		if l.Source == "ONU" {
+			mac := l.Title
+			if len(mac) > 10 && mac[:10] == "Resolved: " {
+				mac = mac[10:]
+			}
+			macs = append(macs, mac)
+		}
+	}
+
+	if len(macs) > 0 {
+		var onus []models.Onu
+		config.DB.Where("mac_address IN ?", macs).Find(&onus)
+		onuMap := make(map[string]string)
+		for _, o := range onus {
+			if o.Customer != "" {
+				onuMap[o.MacAddress] = o.Customer
+			}
+		}
+
+		for i, l := range logs {
+			if l.Source == "ONU" {
+				isResolved := false
+				mac := l.Title
+				if len(mac) > 10 && mac[:10] == "Resolved: " {
+					mac = mac[10:]
+					isResolved = true
+				}
+
+				if customer, ok := onuMap[mac]; ok {
+					if isResolved {
+						logs[i].Title = "Resolved: " + customer + " (" + mac + ")"
+					} else {
+						logs[i].Title = customer + " (" + mac + ")"
+					}
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, logs)
 }
 

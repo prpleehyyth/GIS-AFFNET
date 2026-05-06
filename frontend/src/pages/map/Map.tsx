@@ -106,6 +106,7 @@ export default function MapView() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [onuFilter, setOnuFilter]   = useState<'all' | 'ok' | 'warning' | 'critical' | 'disconnected'>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -154,6 +155,31 @@ export default function MapView() {
   const isMikDown = mikrotik?.interfaces?.some(i => i.available === '2') || false;
   const coreDown  = isOltDown || isMikDown;
 
+  const sq = searchQuery.toLowerCase();
+  const filteredInfras = infras.filter(i => !sq || i.name.toLowerCase().includes(sq));
+  const filteredOdps   = odps.filter(o => !sq || o.name.toLowerCase().includes(sq));
+  const filteredOnus   = onus.filter(o => {
+    if (sq) {
+      const matchCust = o.customer?.toLowerCase().includes(sq);
+      const matchMac  = o.mac_address?.toLowerCase().includes(sq);
+      if (!matchCust && !matchMac) return false;
+    }
+    
+    const rx = parseFloat(o.rx_power);
+    const isDisconnected = o.status === "Koneksi terputus" || o.rx_power === "N/A" || o.rx_power === "0";
+    if (onuFilter === 'disconnected') return isDisconnected;
+    if (isDisconnected && onuFilter !== 'all') return false;
+
+    const isCritical = !isDisconnected && rx <= -27;
+    const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
+    const isOk       = !isDisconnected && rx > -25;
+    
+    if (onuFilter === 'ok') return isOk;
+    if (onuFilter === 'warning') return isWarning;
+    if (onuFilter === 'critical') return isCritical;
+    return true;
+  });
+
   if (!isMounted) return null;
 
   return (
@@ -174,6 +200,28 @@ export default function MapView() {
         }}>
           <span style={{ fontSize: 14 }}>🔄</span>
           <span>Terakhir diperbarui: {lastUpdated ? lastUpdated.toLocaleTimeString('id-ID') : '...'}</span>
+        </div>
+
+        {/* Search Box */}
+        <div style={{
+          background: 'rgba(255,255,255,0.95)', padding: '10px 12px', borderRadius: 10,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e5e7eb',
+          fontFamily: "'Plus Jakarta Sans',sans-serif", display: 'flex', flexDirection: 'column', gap: 8,
+          backdropFilter: 'blur(4px)', width: '200px'
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Pencarian
+          </div>
+          <input
+            type="text"
+            placeholder="Cari pelanggan, ODP, dll..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: '6px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #d1d5db',
+              width: '100%', boxSizing: 'border-box', outline: 'none'
+            }}
+          />
         </div>
 
         {/* ONU Filter */}
@@ -265,7 +313,7 @@ export default function MapView() {
         )}
 
         {/* ── Trunk: OLT → ODC ──────────────────────────────── */}
-        {olt && odps.filter(o => o.type === 'ODC').map(odc => (
+        {olt && filteredOdps.filter(o => o.type === 'ODC').map(odc => (
           <Polyline
             key={`trunk-odc-${odc.id}`}
             positions={[
@@ -277,7 +325,7 @@ export default function MapView() {
         ))}
 
         {/* ── Distribusi: ODC → ODP ─────────────────────────── */}
-        {odps.filter(o => o.type === 'ODP' && o.odc_id).map(odp => {
+        {filteredOdps.filter(o => o.type === 'ODP' && o.odc_id).map(odp => {
           const parentOdc = odps.find(x => x.id === odp.odc_id);
           if (!parentOdc) return null;
           return (
@@ -293,22 +341,7 @@ export default function MapView() {
         })}
 
         {/* ── Drop: ODP → ONU ───────────────────────────────── */}
-        {onus.filter(onu => {
-          if (!onu.odp_id) return false;
-          const rx = parseFloat(onu.rx_power);
-          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
-          if (onuFilter === 'disconnected') return isDisconnected;
-          if (isDisconnected && onuFilter !== 'all') return false;
-
-          const isCritical = !isDisconnected && rx <= -27;
-          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
-          const isOk       = !isDisconnected && rx > -25;
-          
-          if (onuFilter === 'ok') return isOk;
-          if (onuFilter === 'warning') return isWarning;
-          if (onuFilter === 'critical') return isCritical;
-          return true;
-        }).map(onu => {
+        {filteredOnus.map(onu => {
           const parent = odps.find(o => o.id === onu.odp_id);
           if (!parent) return null;
           const rx    = parseFloat(onu.rx_power);
@@ -328,7 +361,7 @@ export default function MapView() {
 
         {/* @ts-ignore - Bypass TS error karena type bawaan library kurang lengkap */}
         <MarkerClusterGroup iconCreateFunction={createCoreClusterIcon}>
-          {infras.map(infra => {
+          {filteredInfras.map(infra => {
             const isDown  = infra.interfaces?.some(i => i.available === '2') || false;
             const isMikro = infra.name.toLowerCase().includes('mikrotik');
             const iconEl  = isMikro
@@ -378,7 +411,7 @@ export default function MapView() {
         </MarkerClusterGroup>
 
         {/* ── Marker: ODC ───────────────────────────────────── */}
-        {odps.filter(o => o.type === 'ODC').map(odc => (
+        {filteredOdps.filter(o => o.type === 'ODC').map(odc => (
           <Marker
             key={`odc-${odc.id}`}
             position={[parseFloat(odc.latitude), parseFloat(odc.longitude)]}
@@ -409,7 +442,7 @@ export default function MapView() {
         ))}
 
         {/* ── Marker: ODP ───────────────────────────────────── */}
-        {odps.filter(o => o.type === 'ODP').map(odp => {
+        {filteredOdps.filter(o => o.type === 'ODP').map(odp => {
           const terisi = onus.filter(o => o.odp_id === odp.id).length;
           const pct    = odp.total_port > 0 ? Math.round((terisi / odp.total_port) * 100) : 0;
           const level: 'ok' | 'warn' | 'full' =
@@ -473,21 +506,7 @@ export default function MapView() {
         })}
 
         {/* ── Marker: ONU ───────────────────────────────────── */}
-        {onus.filter(onu => {
-          const rx = parseFloat(onu.rx_power);
-          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
-          if (onuFilter === 'disconnected') return isDisconnected;
-          if (isDisconnected && onuFilter !== 'all') return false;
-
-          const isCritical = !isDisconnected && rx <= -27;
-          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
-          const isOk       = !isDisconnected && rx > -25;
-          
-          if (onuFilter === 'ok') return isOk;
-          if (onuFilter === 'warning') return isWarning;
-          if (onuFilter === 'critical') return isCritical;
-          return true;
-        }).map(onu => {
+        {filteredOnus.map(onu => {
           const rx         = parseFloat(onu.rx_power);
           const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
           const isCritical = !isDisconnected && rx <= -27;

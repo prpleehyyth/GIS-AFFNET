@@ -249,7 +249,7 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 						})
 					
 					if res.RowsAffected > 0 {
-						msgInfo := "Sinyal ONU kembali normal (Up)"
+						msgInfo := fmt.Sprintf("Sinyal ONU kembali normal: %s dBm (Up)", rxPowerVal)
 						if customerName != "" {
 							msgInfo += fmt.Sprintf(" | Pelanggan: %s", customerName)
 						}

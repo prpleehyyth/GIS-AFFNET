@@ -32,7 +32,7 @@ func TestOnuScenario(c *gin.Context) {
 	switch input.Scenario {
 	case 1:
 		// Skenario 1: Perangkat ONU dimatikan (RX Power drop jadi -30 dBm)
-		pesan := fmt.Sprintf("Sinyal kritis: -30.0 dBm (batas: -25 dBm) | Simulasi Testing")
+		pesan := "Sinyal kritis: -30.0 dBm (batas: -25 dBm) | Simulasi Testing"
 		
 		
 		var existingLog models.Log
@@ -66,7 +66,7 @@ func TestOnuScenario(c *gin.Context) {
 			})
 
 		if res.RowsAffected > 0 {
-			services.RecordLog("info", "ONU", mac, "Sinyal ONU kembali normal (Up) | Simulasi Testing")
+			services.RecordLog("info", "ONU", mac, "Sinyal ONU kembali normal: -19.0 dBm (Up) | Simulasi Testing")
 		}
 
 		config.DB.Model(&models.Onu{}).Where("mac_address = ?", mac).Updates(map[string]interface{}{

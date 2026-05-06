@@ -25,7 +25,8 @@ func SendTelegramNotification(log models.Log) {
 	lokasiTeks := "Koordinat Belum Diatur"
 
 	// Mencari data ONU berdasarkan MAC Address yang ada di log.Title
-	if log.Source == "ONU" {
+	switch log.Source {
+	case "ONU":
 		macAddress := log.Title
 		// Hapus prefix "Resolved: " jika ada, agar pencarian MAC Address tetap akurat
 		if len(macAddress) > 10 && macAddress[:10] == "Resolved: " {
@@ -45,14 +46,14 @@ func SendTelegramNotification(log models.Log) {
 				lokasiTeks = fmt.Sprintf("[Lihat di Google Maps](%s)", mapsUrl)
 			}
 		}
-	} else if log.Source == "Infra" {
+	case "Infra":
 		infraName := log.Title
 		if len(infraName) > 10 && infraName[:10] == "Resolved: " {
 			infraName = infraName[10:]
 		}
-		
+
 		namaPelanggan = "N/A (Infrastruktur Jaringan)"
-		
+
 		var infra models.Infra
 		if err := config.DB.Where("name = ?", infraName).First(&infra).Error; err == nil {
 			if infra.Lat != "" && infra.Lon != "" {
@@ -60,14 +61,14 @@ func SendTelegramNotification(log models.Log) {
 				lokasiTeks = fmt.Sprintf("[Lihat di Google Maps](%s)", mapsUrl)
 			}
 		}
-	} else if log.Source == "ODP" {
+	case "ODP":
 		odpName := log.Title
 		if len(odpName) > 10 && odpName[:10] == "Resolved: " {
 			odpName = odpName[10:]
 		}
-		
+
 		namaPelanggan = "N/A (Perangkat Distribusi)"
-		
+
 		var odp models.Odp
 		if err := config.DB.Where("name = ?", odpName).First(&odp).Error; err == nil {
 			if odp.Latitude != "" && odp.Longitude != "" {
@@ -84,18 +85,26 @@ func SendTelegramNotification(log models.Log) {
 		header = "✅ *STATUS KEMBALI NORMAL*"
 	}
 
+	identitasLabel := "Identitas"
+	switch log.Source {
+	case "ONU":
+		identitasLabel = "MAC Address"
+	case "ODP", "Infra":
+		identitasLabel = "Nama Perangkat"
+	}
+
 	// Format pesan dengan tambahan informasi pelanggan dan lokasi
 	text := fmt.Sprintf(
 		"%s\n"+
 			"━━━━━━━━━━━━━━━━━━\n"+
-			"📌 *Identitas*: `%s` \n"+
+			"📌 *%s*: `%s` \n"+
 			"⚠️ *Level*: %s\n"+
 			"🔌 *Sumber*: %s\n"+
 			"👤 *Pelanggan*: %s\n"+
 			"📍 *Lokasi*: %s\n"+
 			"📝 *Detail*: %s\n"+
 			"━━━━━━━━━━━━━━━━━━",
-		header, log.Title, string(log.Severity), string(log.Source), namaPelanggan, lokasiTeks, log.Message,
+		header, identitasLabel, log.Title, string(log.Severity), string(log.Source), namaPelanggan, lokasiTeks, log.Message,
 	)
 
 	payload := map[string]interface{}{
