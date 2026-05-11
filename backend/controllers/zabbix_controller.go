@@ -44,7 +44,10 @@ func getZabbixAuthToken() (string, error) {
 	return result.Result, nil
 }
 
-// FetchAndProcessZabbixInfra menarik data dari Zabbix dan memproses log/database
+// =====================================================================
+// 1. FETCH AND PROCESS ZABBIX INFRA
+// Menarik data dari Zabbix dan memproses log/database secara internal
+// =====================================================================
 func FetchAndProcessZabbixInfra() ([]byte, error) {
 	token, err := getZabbixAuthToken()
 	if err != nil {
@@ -151,7 +154,10 @@ func FetchAndProcessZabbixInfra() ([]byte, error) {
 	return bodyBytes, nil
 }
 
-// GetZabbixInfra: Ambil Lokasi Mikrotik & OLT
+// =====================================================================
+// 2. GET ZABBIX INFRA (HTTP ENDPOINT)
+// Endpoint untuk mengambil Lokasi Mikrotik & OLT dari frontend
+// =====================================================================
 func GetZabbixInfra(c *gin.Context) {
 	bodyBytes, err := FetchAndProcessZabbixInfra()
 	if err != nil {

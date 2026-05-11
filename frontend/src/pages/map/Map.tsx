@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { renderToString } from 'react-dom/server';
@@ -96,6 +96,17 @@ function InfoCard({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Map Controller for FlyTo ──────────────────────────────────
+function MapController({ center }: { center: [number, number] | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.flyTo(center, 18, { duration: 1.5 });
+    }
+  }, [center, map]);
+  return null;
+}
+
 // ── Main component ────────────────────────────────────────────
 export default function MapView() {
   const [isMounted, setIsMounted]   = useState(false);
@@ -107,6 +118,8 @@ export default function MapView() {
   const [onuFilter, setOnuFilter]   = useState<'all' | 'ok' | 'warning' | 'critical' | 'disconnected'>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -155,30 +168,49 @@ export default function MapView() {
   const isMikDown = mikrotik?.interfaces?.some(i => i.available === '2') || false;
   const coreDown  = isOltDown || isMikDown;
 
-  const sq = searchQuery.toLowerCase();
-  const filteredInfras = infras.filter(i => !sq || i.name.toLowerCase().includes(sq));
-  const filteredOdps   = odps.filter(o => !sq || o.name.toLowerCase().includes(sq));
-  const filteredOnus   = onus.filter(o => {
-    if (sq) {
+  // Search autocomplete logic
+  useEffect(() => {
+    if (!searchQuery || mapCenter !== null) {
+      // Don't search if we just clicked a result (mapCenter was set) and the query is exactly the selected name.
+      // But actually it's easier to just reset mapCenter to null when typing.
+      if (!searchQuery) setSearchResults([]);
+      return;
+    }
+    const sq = searchQuery.toLowerCase();
+    const results: any[] = [];
+
+    infras.forEach(i => {
+      if (i.name.toLowerCase().includes(sq)) {
+        results.push({ id: `infra-${i.hostid}`, name: i.name, type: 'Infra', lat: parseFloat(i.inventory.location_lat), lon: parseFloat(i.inventory.location_lon) });
+      }
+    });
+    odps.forEach(o => {
+      if (o.name.toLowerCase().includes(sq)) {
+        results.push({ id: `odp-${o.id}`, name: o.name, type: o.type, lat: parseFloat(o.latitude), lon: parseFloat(o.longitude) });
+      }
+    });
+    onus.forEach(o => {
       const matchCust = o.customer?.toLowerCase().includes(sq);
       const matchMac  = o.mac_address?.toLowerCase().includes(sq);
-      if (!matchCust && !matchMac) return false;
-    }
-    
-    const rx = parseFloat(o.rx_power);
-    const isDisconnected = o.status === "Koneksi terputus" || o.rx_power === "N/A" || o.rx_power === "0";
-    if (onuFilter === 'disconnected') return isDisconnected;
-    if (isDisconnected && onuFilter !== 'all') return false;
+      if (matchCust || matchMac) {
+        results.push({ id: `onu-${o.id}`, name: o.customer || o.mac_address, type: 'ONU', lat: parseFloat(o.latitude), lon: parseFloat(o.longitude) });
+      }
+    });
+    setSearchResults(results.slice(0, 8));
+  }, [searchQuery, infras, odps, onus]);
 
-    const isCritical = !isDisconnected && rx <= -27;
-    const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
-    const isOk       = !isDisconnected && rx > -25;
-    
-    if (onuFilter === 'ok') return isOk;
-    if (onuFilter === 'warning') return isWarning;
-    if (onuFilter === 'critical') return isCritical;
-    return true;
-  });
+  const handleSelectResult = (r: any) => {
+    setSearchQuery(r.name);
+    setSearchResults([]);
+    setMapCenter([r.lat, r.lon]);
+    setOnuFilter('all');
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setMapCenter(null);
+    setOnuFilter('all');
+  };
 
   if (!isMounted) return null;
 
@@ -203,25 +235,52 @@ export default function MapView() {
         </div>
 
         {/* Search Box */}
-        <div style={{
-          background: 'rgba(255,255,255,0.95)', padding: '10px 12px', borderRadius: 10,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e5e7eb',
-          fontFamily: "'Plus Jakarta Sans',sans-serif", display: 'flex', flexDirection: 'column', gap: 8,
-          backdropFilter: 'blur(4px)', width: '200px'
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Pencarian
+        <div style={{ position: 'relative', width: '250px' }}>
+          <div style={{
+            background: 'rgba(255,255,255,0.95)', padding: '10px 12px', borderRadius: 10,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e5e7eb',
+            fontFamily: "'Plus Jakarta Sans',sans-serif", display: 'flex', flexDirection: 'column', gap: 8,
+            backdropFilter: 'blur(4px)'
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Cari Perangkat
+            </div>
+            <input
+              type="text"
+              placeholder="Cari pelanggan, ODP, dll..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              style={{
+                padding: '6px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #d1d5db',
+                width: '100%', boxSizing: 'border-box', outline: 'none'
+              }}
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Cari pelanggan, ODP, dll..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              padding: '6px 10px', fontSize: 12, borderRadius: 6, border: '1px solid #d1d5db',
-              width: '100%', boxSizing: 'border-box', outline: 'none'
-            }}
-          />
+
+          {searchResults.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+              background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              border: '1px solid #e5e7eb', overflow: 'hidden', zIndex: 2000,
+              fontFamily: "'Plus Jakarta Sans',sans-serif", maxHeight: '300px', overflowY: 'auto'
+            }}>
+              {searchResults.map(r => (
+                <div 
+                  key={r.id} 
+                  onClick={() => handleSelectResult(r)}
+                  style={{
+                    padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6',
+                    display: 'flex', flexDirection: 'column', gap: 2
+                  }}
+                  onMouseOver={e => e.currentTarget.style.background = '#f9fafb'}
+                  onMouseOut={e => e.currentTarget.style.background = '#fff'}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{r.name}</span>
+                  <span style={{ fontSize: 10, color: '#6b7280' }}>Tipe: {r.type}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ONU Filter */}
@@ -291,6 +350,8 @@ export default function MapView() {
         zoom={15}
         style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 0 }}
       >
+        <MapController center={mapCenter} />
+
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -313,7 +374,7 @@ export default function MapView() {
         )}
 
         {/* ── Trunk: OLT → ODC ──────────────────────────────── */}
-        {olt && filteredOdps.filter(o => o.type === 'ODC').map(odc => (
+        {olt && odps.filter(o => o.type === 'ODC').map(odc => (
           <Polyline
             key={`trunk-odc-${odc.id}`}
             positions={[
@@ -325,7 +386,7 @@ export default function MapView() {
         ))}
 
         {/* ── Distribusi: ODC → ODP ─────────────────────────── */}
-        {filteredOdps.filter(o => o.type === 'ODP' && o.odc_id).map(odp => {
+        {odps.filter(o => o.type === 'ODP' && o.odc_id).map(odp => {
           const parentOdc = odps.find(x => x.id === odp.odc_id);
           if (!parentOdc) return null;
           return (
@@ -341,7 +402,21 @@ export default function MapView() {
         })}
 
         {/* ── Drop: ODP → ONU ───────────────────────────────── */}
-        {filteredOnus.map(onu => {
+        {onus.filter(onu => {
+          const rx = parseFloat(onu.rx_power);
+          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
+          if (onuFilter === 'disconnected') return isDisconnected;
+          if (isDisconnected && onuFilter !== 'all') return false;
+
+          const isCritical = !isDisconnected && rx <= -27;
+          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
+          const isOk       = !isDisconnected && rx > -25;
+          
+          if (onuFilter === 'ok') return isOk;
+          if (onuFilter === 'warning') return isWarning;
+          if (onuFilter === 'critical') return isCritical;
+          return true;
+        }).map(onu => {
           const parent = odps.find(o => o.id === onu.odp_id);
           if (!parent) return null;
           const rx    = parseFloat(onu.rx_power);
@@ -361,7 +436,7 @@ export default function MapView() {
 
         {/* @ts-ignore - Bypass TS error karena type bawaan library kurang lengkap */}
         <MarkerClusterGroup iconCreateFunction={createCoreClusterIcon}>
-          {filteredInfras.map(infra => {
+          {infras.map(infra => {
             const isDown  = infra.interfaces?.some(i => i.available === '2') || false;
             const isMikro = infra.name.toLowerCase().includes('mikrotik');
             const iconEl  = isMikro
@@ -411,7 +486,7 @@ export default function MapView() {
         </MarkerClusterGroup>
 
         {/* ── Marker: ODC ───────────────────────────────────── */}
-        {filteredOdps.filter(o => o.type === 'ODC').map(odc => (
+        {odps.filter(o => o.type === 'ODC').map(odc => (
           <Marker
             key={`odc-${odc.id}`}
             position={[parseFloat(odc.latitude), parseFloat(odc.longitude)]}
@@ -442,7 +517,7 @@ export default function MapView() {
         ))}
 
         {/* ── Marker: ODP ───────────────────────────────────── */}
-        {filteredOdps.filter(o => o.type === 'ODP').map(odp => {
+        {odps.filter(o => o.type === 'ODP').map(odp => {
           const terisi = onus.filter(o => o.odp_id === odp.id).length;
           const pct    = odp.total_port > 0 ? Math.round((terisi / odp.total_port) * 100) : 0;
           const level: 'ok' | 'warn' | 'full' =
@@ -506,7 +581,21 @@ export default function MapView() {
         })}
 
         {/* ── Marker: ONU ───────────────────────────────────── */}
-        {filteredOnus.map(onu => {
+        {onus.filter(onu => {
+          const rx = parseFloat(onu.rx_power);
+          const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
+          if (onuFilter === 'disconnected') return isDisconnected;
+          if (isDisconnected && onuFilter !== 'all') return false;
+
+          const isCritical = !isDisconnected && rx <= -27;
+          const isWarning  = !isDisconnected && rx > -27 && rx <= -25;
+          const isOk       = !isDisconnected && rx > -25;
+          
+          if (onuFilter === 'ok') return isOk;
+          if (onuFilter === 'warning') return isWarning;
+          if (onuFilter === 'critical') return isCritical;
+          return true;
+        }).map(onu => {
           const rx         = parseFloat(onu.rx_power);
           const isDisconnected = onu.status === "Koneksi terputus" || onu.rx_power === "N/A" || onu.rx_power === "0";
           const isCritical = !isDisconnected && rx <= -27;

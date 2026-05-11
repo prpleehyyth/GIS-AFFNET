@@ -13,17 +13,17 @@ export default function LogsPage() {
     document.title = "Logs | AFF NET GIS";
   }, []);
 
-  const [logs,     setLogs]     = useState<LogEntry[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [severity, setSeverity] = useState('');
-  const [source,   setSource]   = useState('');
-  const [search,   setSearch]   = useState('');
+  const [source, setSource] = useState('');
+  const [search, setSearch] = useState('');
 
   const refresh = useCallback(async () => {
     try {
       const params: Record<string, string> = {};
       if (severity) params.severity = severity;
-      if (source)   params.source   = source;
+      if (source) params.source = source;
       // We don't fetch by 'resolved' anymore for the simple viewer
       const data = await fetchLogs(params as any);
       setLogs(data);
@@ -47,8 +47,8 @@ export default function LogsPage() {
 
   // Stats
   const criticalCount = logs.filter(l => l.severity === 'critical').length;
-  const warningCount  = logs.filter(l => l.severity === 'warning').length;
-  const infoCount     = logs.filter(l => l.severity === 'info').length;
+  const warningCount = logs.filter(l => l.severity === 'warning').length;
+  const infoCount = logs.filter(l => l.severity === 'info').length;
 
   return (
     <div className={styles.page}>
@@ -62,7 +62,6 @@ export default function LogsPage() {
             <div className={styles.headerSub}>Riwayat kejadian jaringan dari semua sumber</div>
           </div>
         </div>
-        <Link to="/" className={styles.backBtn}>← Kembali ke Dashboard</Link>
       </div>
 
       {/* Stats */}

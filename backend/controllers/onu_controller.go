@@ -9,7 +9,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// UpdateOnuDetails: Menambahkan Nama & Lokasi pada MAC yang sudah disedot dari Zabbix
+// =====================================================================
+// 1. UPDATE ONU DETAILS (MEMPERBARUI NAMA PELANGGAN & KOORDINAT)
+// Menambahkan Nama & Lokasi pada MAC yang sudah disedot dari Zabbix
+// =====================================================================
 func UpdateOnuDetails(c *gin.Context) {
 	macAddress := c.Param("mac") // Kita ambil MAC dari URL parameter
 
@@ -57,7 +60,9 @@ func UpdateOnuDetails(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Data pelanggan berhasil diupdate", "data": existingOnu})
 }
 
-// GetAllOnu: Mengambil semua data ONU
+// =====================================================================
+// 2. GET ALL ONU (MENGAMBIL SEMUA DATA ONU)
+// =====================================================================
 func GetAllOnu(c *gin.Context) {
 	var onus []models.Onu
 	
@@ -70,7 +75,9 @@ func GetAllOnu(c *gin.Context) {
 	c.JSON(http.StatusOK, onus)
 }
 
-// DeleteOnu: Menghapus data ONU
+// =====================================================================
+// 3. DELETE ONU (MENGHAPUS DATA ONU)
+// =====================================================================
 func DeleteOnu(c *gin.Context) {
 	id := c.Param("id")
 	if err := config.DB.Delete(&models.Onu{}, id).Error; err != nil {

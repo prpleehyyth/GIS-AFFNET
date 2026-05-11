@@ -8,6 +8,9 @@ import (
 	"gopkg.in/routeros.v2"
 )
 
+// =====================================================================
+// 1. GET PPPOE ACTIVE (MENGAMBIL DAFTAR USER AKTIF)
+// =====================================================================
 func GetPPPoEActive(c *gin.Context) {
 	// 1. Ambil kredensial dari file .env
 	mkIp := os.Getenv("MIKROTIK_IP")       // Contoh: "192.168.1.1:8728"

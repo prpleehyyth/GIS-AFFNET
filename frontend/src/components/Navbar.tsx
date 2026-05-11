@@ -1,9 +1,11 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import styles from './navbar.module.css';
 
 export default function Navbar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   if (pathname === '/login') return null;
 
@@ -57,26 +59,36 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Links */}
-      <div className={styles.links}>
-        {navLinks.map(({ href, label, icon }) => (
-          <Link
-            key={href}
-            to={href}
-            className={`${styles.link} ${pathname === href ? styles.linkActive : ''}`}
-          >
-            <span className={styles.linkIcon}>{icon}</span>
-            {label}
-          </Link>
-        ))}
-      </div>
+      {/* Mobile Toggle */}
+      <button 
+        className={styles.mobileToggle} 
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+      >
+        {isMobileOpen ? '✕' : '☰'}
+      </button>
 
-      {/* Right side */}
-      <div className={styles.right}>
-        <div className={styles.separator} />
-        <button className={styles.logoutBtn} onClick={handleLogout}>
-          Logout
-        </button>
+      {/* Menu */}
+      <div className={`${styles.menu} ${isMobileOpen ? styles.menuOpen : ''}`}>
+        <div className={styles.links}>
+          {navLinks.map(({ href, label, icon }) => (
+            <Link
+              key={href}
+              to={href}
+              className={`${styles.link} ${pathname === href ? styles.linkActive : ''}`}
+              onClick={() => setIsMobileOpen(false)}
+            >
+              <span className={styles.linkIcon}>{icon}</span>
+              {label}
+            </Link>
+          ))}
+        </div>
+
+        <div className={styles.right}>
+          <div className={styles.separator} />
+          <button className={styles.logoutBtn} onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
       </div>
     </nav>
   );

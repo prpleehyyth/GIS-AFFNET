@@ -7,12 +7,12 @@ const ONU_URL = '/api/onu';
 const ODP_URL = '/api/odp';
 
 export default function OnuPage() {
-  const [onus,        setOnus]        = useState<Onu[]>([]);
-  const [odps,        setOdps]        = useState<Odp[]>([]);
-  const [filterMode,  setFilterMode]  = useState<FilterMode>('all');
+  const [onus, setOnus] = useState<Onu[]>([]);
+  const [odps, setOdps] = useState<Odp[]>([]);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [selectedOnu, setSelectedOnu] = useState<Onu | null>(null);
-  const [form,        setForm]        = useState<OnuForm>({ customer: '', latitude: '', longitude: '', odp_id: '' });
-  const [isLoading,   setIsLoading]   = useState(false);
+  const [form, setForm] = useState<OnuForm>({ customer: '', latitude: '', longitude: '', odp_id: '' });
+  const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // ── Fetch ──────────────────────────────────────────────────
@@ -22,7 +22,7 @@ export default function OnuPage() {
     const odpData = await odpRes.json();
     const rawOnus = Array.isArray(onuData) ? onuData : (onuData.result || []);
     const rawOdps = Array.isArray(odpData) ? odpData : (odpData.result || []);
-    
+
     let latest = 0;
     rawOnus.forEach((o: any) => {
       if (o.updated_at) {
@@ -48,17 +48,17 @@ export default function OnuPage() {
   const openEdit = (onu: Onu) => {
     setSelectedOnu(onu);
     setForm({
-      customer:  onu.customer  || '',
-      latitude:  onu.latitude  || '',
+      customer: onu.customer || '',
+      latitude: onu.latitude || '',
       longitude: onu.longitude || '',
-      odp_id:    onu.odp_id ? onu.odp_id.toString() : '',
+      odp_id: onu.odp_id ? onu.odp_id.toString() : '',
     });
   };
 
   const closeModal = () => { setSelectedOnu(null); };
 
   const handleOdpChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id  = e.target.value;
+    const id = e.target.value;
     const odp = odps.find(o => o.id.toString() === id);
     setForm(f => odp
       ? { ...f, odp_id: id, latitude: odp.latitude, longitude: odp.longitude }
@@ -83,13 +83,13 @@ export default function OnuPage() {
   // ── Filtered list ──────────────────────────────────────────
   const filtered = onus.filter(onu => {
     const has = !!onu.latitude && !!onu.longitude;
-    if (filterMode === 'complete')   return has;
+    if (filterMode === 'complete') return has;
     if (filterMode === 'incomplete') return !has;
     return true;
   });
 
   // ── Derived stats ──────────────────────────────────────────
-  const completeCount   = onus.filter(o => o.latitude && o.longitude).length;
+  const completeCount = onus.filter(o => o.latitude && o.longitude).length;
   const incompleteCount = onus.length - completeCount;
 
   return (
@@ -111,7 +111,6 @@ export default function OnuPage() {
             </div>
           </div>
         </div>
-        <Link to="/map" className={styles.backBtn}>← Kembali ke Peta</Link>
       </div>
 
       {/* Stats */}

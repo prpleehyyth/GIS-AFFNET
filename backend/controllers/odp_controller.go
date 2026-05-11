@@ -10,6 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// =====================================================================
+// 1. CREATE ODP (MENAMBAHKAN TIANG ODP BARU)
+// =====================================================================
 func CreateOdp(c *gin.Context) {
 	var odp models.Odp
 	if err := c.ShouldBindJSON(&odp); err != nil {
@@ -21,6 +24,9 @@ func CreateOdp(c *gin.Context) {
 	c.JSON(http.StatusOK, odp)
 }
 
+// =====================================================================
+// 2. GET ALL ODP (MENGAMBIL SEMUA TIANG ODP & ODC)
+// =====================================================================
 func GetAllOdp(c *gin.Context) {
     var odps []models.Odp
     // Tambahkan Preload("Odc") supaya data bapaknya ikut narik
@@ -28,7 +34,9 @@ func GetAllOdp(c *gin.Context) {
     c.JSON(http.StatusOK, odps)
 }
 
-// Update ODP
+// =====================================================================
+// 3. UPDATE ODP (MENGUBAH DATA TIANG ODP)
+// =====================================================================
 func UpdateOdp(c *gin.Context) {
     id := c.Param("id")
     var odp models.Odp
@@ -46,6 +54,9 @@ func UpdateOdp(c *gin.Context) {
     c.JSON(http.StatusOK, odp)
 }
 
+// =====================================================================
+// 4. DELETE ODP (MENGHAPUS TIANG ODP BERSERTA KONEKSI PELANGGAN)
+// =====================================================================
 func DeleteOdp(c *gin.Context) {
     id := c.Param("id")
 

@@ -8,6 +8,10 @@ import (
 	"affnet-backend/models"
 )
 
+// =====================================================================
+// 1. RECORD LOG (MENYIMPAN LOG KE DATABASE)
+// Membuat log baru dan mengirim notifikasi telegram jika status kritis
+// =====================================================================
 // RecordLog creates a log and optionally sends a telegram notification if critical.
 func RecordLog(severity models.LogSeverity, source models.LogSource, title string, message string) {
 	// Anti-spam: Hanya berlaku untuk log error/critical/warning.
@@ -42,6 +46,9 @@ func RecordLog(severity models.LogSeverity, source models.LogSource, title strin
 		}
 	}
 }
+// =====================================================================
+// 2. RESOLVE LOG (MENGUBAH STATUS ERROR JADI NORMAL)
+// =====================================================================
 // ResolveLog auto resolves a log
 func ResolveLog(title string, source models.LogSource) {
 	var logsToResolve []models.Log
@@ -62,6 +69,9 @@ func ResolveLog(title string, source models.LogSource) {
 	}
 }
 
+// =====================================================================
+// 3. CLEAN OLD LOGS (PENGHAPUSAN OTOMATIS)
+// =====================================================================
 // CleanOldLogs menghapus log yang usianya lebih dari 30 hari
 func CleanOldLogs() {
 	config.DB.Where("created_at < ?", time.Now().AddDate(0, 0, -30)).Delete(&models.Log{})

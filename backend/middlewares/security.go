@@ -13,6 +13,9 @@ import (
 // Ambil secret key dari env
 var jwtKey = []byte(os.Getenv("JWT_SECRET"))
 
+// =====================================================================
+// 1. CORS MIDDLEWARE
+// =====================================================================
 // 1. Middleware untuk CORS
 func CORSMiddleware() gin.HandlerFunc {
 	return cors.New(cors.Config{
@@ -27,6 +30,9 @@ func CORSMiddleware() gin.HandlerFunc {
 	})
 }
 
+// =====================================================================
+// 2. AUTH MIDDLEWARE (VALIDASI JWT TOKEN)
+// =====================================================================
 // 2. Middleware untuk Validasi Token (JWT)
 // Pastikan nama fungsinya "AuthMiddleware" dengan huruf A besar
 func AuthMiddleware() gin.HandlerFunc {

@@ -11,6 +11,10 @@ import (
 	"affnet-backend/models"
 )
 
+// =====================================================================
+// 1. SEND TELEGRAM NOTIFICATION
+// Mengirim pesan error/pemulihan ke grup/bot Telegram beserta detailnya
+// =====================================================================
 func SendTelegramNotification(log models.Log) {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	chatID := os.Getenv("TELEGRAM_CHAT_ID")

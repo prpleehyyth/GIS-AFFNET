@@ -7,20 +7,20 @@ const BASE_URL = '/api/odp';
 const EMPTY: OdpForm = { name: '', type: 'ODP', latitude: '', longitude: '', total_port: 8, odc_id: null };
 
 export default function OdpPage() {
-  const [odps,            setOdps]            = useState<Odp[]>([]);
-  const [form,            setForm]            = useState<OdpForm>(EMPTY);
-  const [editId,          setEditId]          = useState<number | null>(null);
-  const [isModalOpen,     setIsModalOpen]     = useState(false);
+  const [odps, setOdps] = useState<Odp[]>([]);
+  const [form, setForm] = useState<OdpForm>(EMPTY);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const [isLoading,       setIsLoading]       = useState(false);
-  const [filterType,      setFilterType]      = useState<'ALL' | 'ODP' | 'ODC'>('ALL');
+  const [isLoading, setIsLoading] = useState(false);
+  const [filterType, setFilterType] = useState<'ALL' | 'ODP' | 'ODC'>('ALL');
 
   useEffect(() => {
     document.title = "ODC & ODP | AFF NET GIS";
   }, []);
 
   const refresh = useCallback(async () => {
-    const res  = await fetch(BASE_URL, { credentials: 'include' });
+    const res = await fetch(BASE_URL, { credentials: 'include' });
     const data = await res.json();
     setOdps(Array.isArray(data) ? data : []);
   }, []);
@@ -30,9 +30,9 @@ export default function OdpPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const url    = editId ? `${BASE_URL}/${editId}` : BASE_URL;
+    const url = editId ? `${BASE_URL}/${editId}` : BASE_URL;
     const method = editId ? 'PUT' : 'POST';
-    const res    = await fetch(url, {
+    const res = await fetch(url, {
       method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -52,7 +52,7 @@ export default function OdpPage() {
   };
 
   const openCreate = () => { setEditId(null); setForm(EMPTY); setIsModalOpen(true); };
-  const openEdit   = (odp: Odp) => {
+  const openEdit = (odp: Odp) => {
     setEditId(odp.id);
     setForm({ name: odp.name, type: odp.type, latitude: odp.latitude, longitude: odp.longitude, total_port: odp.total_port, odc_id: odp.odc_id ?? null });
     setIsModalOpen(true);
@@ -82,8 +82,8 @@ export default function OdpPage() {
 
   // Port usage untuk progress bar
   const totalPorts = odps.reduce((s, o) => s + o.total_port, 0);
-  const usedPorts  = totalPorts - totalAvailable;
-  const usagePct   = totalPorts > 0 ? Math.round((usedPorts / totalPorts) * 100) : 0;
+  const usedPorts = totalPorts - totalAvailable;
+  const usagePct = totalPorts > 0 ? Math.round((usedPorts / totalPorts) * 100) : 0;
 
   return (
     <div className={styles.page}>
@@ -97,7 +97,6 @@ export default function OdpPage() {
             <div className={styles.headerSub}>Kelola titik distribusi jaringan fiber</div>
           </div>
         </div>
-        <Link to="/dashboard" className={styles.backBtn}>← Kembali ke Dashboard</Link>
       </div>
 
       {/* Stats */}

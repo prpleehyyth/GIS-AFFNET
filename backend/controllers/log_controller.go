@@ -11,7 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CreateLog — dipanggil dari frontend setiap ada event
+// =====================================================================
+// 1. CREATE LOG (MENYIMPAN LOG EVENT BARU)
+// Endpoint untuk mencatat log dari sumber manapun (ONU, ODP, Sistem)
+// =====================================================================
 func CreateLog(c *gin.Context) {
 	var input struct {
 		Severity string `json:"severity" binding:"required"`
@@ -66,7 +69,10 @@ func CreateLog(c *gin.Context) {
 	c.JSON(http.StatusCreated, log)
 }
 
-// GetLogs — ambil semua log, support filter severity & source
+// =====================================================================
+// 2. GET LOGS (MENGAMBIL DAFTAR LOG)
+// Endpoint untuk menampilkan log di frontend, dengan fitur filter & enrich nama pelanggan
+// =====================================================================
 func GetLogs(c *gin.Context) {
 	var logs []models.Log
 
@@ -135,7 +141,10 @@ func GetLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, logs)
 }
 
-// ResolveLog — tandai log sebagai resolved
+// =====================================================================
+// 3. RESOLVE LOG (TANDAI LOG SELESAI BY ID)
+// Mengubah status error menjadi resolved untuk satu event
+// =====================================================================
 func ResolveLog(c *gin.Context) {
 	id := c.Param("id")
 	now := time.Now()
@@ -165,7 +174,9 @@ func ResolveLog(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Log ditandai resolved dan log baru dibuat"})
 }
 
-// ResolveLogByTitle — resolve semua log aktif dengan title tertentu
+// =====================================================================
+// 4. RESOLVE LOG BY TITLE (TANDAI LOG SELESAI MASSAL BY MAC/TITLE)
+// =====================================================================
 func ResolveLogByTitle(c *gin.Context) {
 	var input struct {
 		Title  string `json:"title"  binding:"required"`
@@ -199,7 +210,9 @@ func ResolveLogByTitle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Log berhasil di-resolve"})
 }
 
-// DeleteLog — hapus log by ID
+// =====================================================================
+// 5. DELETE LOG (HAPUS LOG SPESIFIK)
+// =====================================================================
 func DeleteLog(c *gin.Context) {
 	id := c.Param("id")
 	if err := config.DB.Delete(&models.Log{}, id).Error; err != nil {
@@ -209,7 +222,9 @@ func DeleteLog(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Log dihapus"})
 }
 
-// ClearResolvedLogs — hapus semua log yang sudah resolved
+// =====================================================================
+// 6. CLEAR RESOLVED LOGS (HAPUS SEMUA LOG YANG SUDAH RESOLVED)
+// =====================================================================
 func ClearResolvedLogs(c *gin.Context) {
 	if err := config.DB.Where("resolved = true").Delete(&models.Log{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal membersihkan log"})
@@ -218,7 +233,10 @@ func ClearResolvedLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Log resolved berhasil dihapus"})
 }
 
-// TestBulkTelegram — Endpoint sementara untuk ngetes koneksi bot
+// =====================================================================
+// 7. TEST BULK TELEGRAM (ENDPOINT TESTING)
+// Mengirimkan 5 log terbaru ke Telegram untuk ngetes koneksi bot
+// =====================================================================
 func TestBulkTelegram(c *gin.Context) {
 	var logs []models.Log
 

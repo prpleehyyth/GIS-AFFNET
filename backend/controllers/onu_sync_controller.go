@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"affnet-backend/config"
@@ -17,7 +18,6 @@ import (
 	"affnet-backend/services"
 
 	"github.com/gin-gonic/gin"
-	"gopkg.in/routeros.v2"
 )
 
 // ─────────────────────────────────────────────
@@ -72,39 +72,18 @@ func extractMacAddress(input string) string {
 // ─────────────────────────────────────────────
 // FetchAndProcessOnuSync mengeksekusi logika sync ONU dan mereturn map statistik
 func FetchAndProcessOnuSync() (map[string]interface{}, error) {
-	macToCustomer := make(map[string]string)
-
-	mkClient, errMk := routeros.Dial(
-		os.Getenv("MIKROTIK_IP"),
-		os.Getenv("MIKROTIK_USER"),
-		os.Getenv("MIKROTIK_PASS"),
-	)
-
-	if errMk != nil {
-		fmt.Printf("[WARN] Gagal konek MikroTik: %v — sinkronisasi lanjut tanpa data Customer\n", errMk)
-	} else {
-		defer mkClient.Close()
-		reply, errRun := mkClient.Run("/ppp/active/print")
-		if errRun != nil {
-			fmt.Printf("[WARN] Gagal baca PPPoE aktif: %v\n", errRun)
-		} else {
-			for _, re := range reply.Re {
-				callerID := re.Map["caller-id"]
-				username  := strings.TrimSpace(re.Map["name"])
-				key := normalizeMac(callerID)
-				if key != "" && username != "" {
-					macToCustomer[key] = username
-				}
-			}
-			fmt.Printf("[INFO] PPPoE aktif dimuat: %d sesi\n", len(macToCustomer))
-		}
-	}
-
+	// =====================================================================
+	// 1. AUTENTIKASI ZABBIX
+	// =====================================================================
 	token, err := getZabbixAuthToken()
 	if err != nil {
 		return nil, fmt.Errorf("gagal login ke Zabbix: %v", err)
 	}
 
+	// =====================================================================
+	// 2. FETCH DATA ZABBIX API
+	// Mengambil semua item redaman ONU menggunakan zabbix item.get
+	// =====================================================================
 	zabbixPayload := models.ZabbixRequest{
 		Jsonrpc: "2.0",
 		Method:  "item.get",
@@ -151,11 +130,14 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 	}
 
 	const batasKritis = -25.0
-	countNew      := 0
-	countUpdate   := 0
-	countCustomer := 0
-	countSkip     := 0
+	var countNew int32
+	var countUpdate int32
+	var countSkip int32
 
+	// =====================================================================
+	// 3. PARSING & DEDUPLIKASI DATA
+	// Mengekstrak MAC Address dari nama item dan menyimpan data terbaru saja
+	// =====================================================================
 	// Deduplicate items by MAC address to prevent flapping if Zabbix returns multiple items for the same ONU
 	type zabbixItem struct {
 		Itemid    string
@@ -170,7 +152,7 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 	for _, item := range zabbixData.Result {
 		dbMac := extractMacAddress(item.Name)
 		if dbMac == "" {
-			countSkip++
+			atomic.AddInt32(&countSkip, 1)
 			continue
 		}
 
@@ -200,103 +182,122 @@ func FetchAndProcessOnuSync() (map[string]interface{}, error) {
 		}
 	}
 
-	for dbMac, item := range bestItemPerMac {
+	// =====================================================================
+	// 4. SETUP WORKER POOL & GOROUTINES
+	// Menjalankan pengecekan DB dan update secara paralel untuk ribuan ONU
+	// =====================================================================
+	// Worker Pool Setup
+	numWorkers := 10 // Bisa disesuaikan
+	var wg sync.WaitGroup
+	type Job struct {
+		Mac  string
+		Item zabbixItem
+	}
+	jobs := make(chan Job, len(bestItemPerMac))
 
-		rxPowerVal := item.Lastvalue
-		statusVal := "Online"
+	// Spawn workers
+	for w := 1; w <= numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				dbMac := job.Mac
+				item := job.Item
 
-		// Jika item belum pernah mendapatkan data atau bernilai 0
-		if item.Lastclock == "0" || item.Lastvalue == "0" || item.Lastvalue == "0.0000" || item.Lastvalue == "" {
-			rxPowerVal = "N/A"
-			statusVal = "Koneksi terputus"
-		}
+				rxPowerVal := item.Lastvalue
+				statusVal := "Online"
 
-		lookupKey := normalizeMac(dbMac)
-		customerName := macToCustomer[lookupKey]
-		if customerName != "" {
-			countCustomer++
-		}
+				// =============================================================
+				// 5. EVALUASI STATUS & SINYAL ONU (KONEKSI TERPUTUS / KRITIS)
+				// =============================================================
+				// Jika item belum pernah mendapatkan data atau bernilai 0
+				if item.Lastclock == "0" || item.Lastvalue == "0" || item.Lastvalue == "0.0000" || item.Lastvalue == "" {
+					rxPowerVal = "N/A"
+					statusVal = "Koneksi terputus"
+				}
 
-		if rxPowerVal != "N/A" {
-			rxPowerFloat, errParse := strconv.ParseFloat(rxPowerVal, 64)
-			if errParse == nil {
-				if rxPowerFloat < batasKritis {
-					var existingLog models.Log
-					errLog := config.DB.
-						Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
-						First(&existingLog).Error
+				if rxPowerVal != "N/A" {
+					rxPowerFloat, errParse := strconv.ParseFloat(rxPowerVal, 64)
+					if errParse == nil {
+						if rxPowerFloat < batasKritis {
+							var existingLog models.Log
+							errLog := config.DB.
+								Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
+								First(&existingLog).Error
 
-					if errLog != nil {
-						pesan := fmt.Sprintf("Sinyal kritis: %s dBm (batas: %.0f dBm)", rxPowerVal, batasKritis)
-						if customerName != "" {
-							pesan += fmt.Sprintf(" | Pelanggan: %s", customerName)
+							if errLog != nil {
+								pesan := fmt.Sprintf("Sinyal kritis: %s dBm (batas: %.0f dBm)", rxPowerVal, batasKritis)
+								newLog := models.Log{
+									Severity: "critical",
+									Source:   "ONU",
+									Title:    dbMac,
+									Message:  pesan,
+								}
+								config.DB.Create(&newLog)
+								go services.SendTelegramNotification(newLog)
+							}
+						} else {
+							res := config.DB.Model(&models.Log{}).
+								Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
+								Updates(map[string]interface{}{
+									"resolved":    true,
+									"resolved_at": time.Now(),
+								})
+
+							if res.RowsAffected > 0 {
+								msgInfo := fmt.Sprintf("Sinyal ONU kembali normal: %s dBm (Up)", rxPowerVal)
+								services.RecordLog("info", "ONU", dbMac, msgInfo)
+							}
 						}
-						newLog := models.Log{
-							Severity: "critical",
-							Source:   "ONU",
-							Title:    dbMac,
-							Message:  pesan,
-						}
-						config.DB.Create(&newLog)
-						go services.SendTelegramNotification(newLog)
-					}
-				} else {
-					res := config.DB.Model(&models.Log{}).
-						Where("title = ? AND source = ? AND resolved = false", dbMac, "ONU").
-						Updates(map[string]interface{}{
-							"resolved":    true,
-							"resolved_at": time.Now(),
-						})
-					
-					if res.RowsAffected > 0 {
-						msgInfo := fmt.Sprintf("Sinyal ONU kembali normal: %s dBm (Up)", rxPowerVal)
-						if customerName != "" {
-							msgInfo += fmt.Sprintf(" | Pelanggan: %s", customerName)
-						}
-						services.RecordLog("info", "ONU", dbMac, msgInfo)
 					}
 				}
-			}
-		}
 
-		var existingOnu models.Onu
-		result := config.DB.Where("mac_address = ?", dbMac).First(&existingOnu)
+				// =============================================================
+				// 6. UPDATE ATAU INSERT PERANGKAT ONU KE DATABASE
+				// =============================================================
+				var existingOnu models.Onu
+				result := config.DB.Where("mac_address = ?", dbMac).First(&existingOnu)
 
-		if result.RowsAffected > 0 {
-			updateData := map[string]interface{}{
-				"rx_power": rxPowerVal,
-				"status":   statusVal,
+				if result.RowsAffected > 0 {
+					updateData := map[string]interface{}{
+						"rx_power": rxPowerVal,
+						"status":   statusVal,
+					}
+					config.DB.Model(&existingOnu).Updates(updateData)
+					atomic.AddInt32(&countUpdate, 1)
+				} else {
+					config.DB.Create(&models.Onu{
+						MacAddress: dbMac,
+						RxPower:    rxPowerVal,
+						Status:     statusVal,
+						Customer:   "", // PPPoE ditiadakan
+					})
+
+					msg := "Perangkat ONU baru terdeteksi"
+					services.RecordLog("info", "ONU", dbMac, msg)
+					atomic.AddInt32(&countNew, 1)
+				}
 			}
-			if customerName != "" {
-				updateData["customer"] = customerName
-			}
-			config.DB.Model(&existingOnu).Updates(updateData)
-			countUpdate++
-		} else {
-			config.DB.Create(&models.Onu{
-				MacAddress: dbMac,
-				RxPower:    rxPowerVal,
-				Status:     statusVal,
-				Customer:   customerName,
-			})
-			
-			msg := "Perangkat ONU baru terdeteksi"
-			if customerName != "" {
-				msg += " (Pelanggan: " + customerName + ")"
-			}
-			services.RecordLog("info", "ONU", dbMac, msg)
-			
-			countNew++
-		}
+		}()
 	}
+
+	// =====================================================================
+	// 7. DISTRIBUSI PEKERJAAN (KIRIM KE CHANNEL) & TUNGGU SELESAI
+	// =====================================================================
+	// Kirim pekerjaan ke channel
+	for dbMac, item := range bestItemPerMac {
+		jobs <- Job{Mac: dbMac, Item: item}
+	}
+	close(jobs)
+
+	// Tunggu semua worker selesai
+	wg.Wait()
 
 	return map[string]interface{}{
 		"message":          "Sinkronisasi selesai",
 		"total_zabbix":     len(zabbixData.Result),
-		"total_pppoe":      len(macToCustomer),
 		"onu_baru":         countNew,
 		"onu_diupdate":     countUpdate,
-		"customer_matched": countCustomer,
 		"item_skip_no_mac": countSkip,
 	}, nil
 }

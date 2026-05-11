@@ -102,12 +102,6 @@ export default function Dashboard() {
           <p className={styles.eyebrow}>AFF NET · FTTH</p>
           <h1 className={styles.title}>Network Overview</h1>
         </div>
-        <div className={styles.headerRight}>
-          <span className={styles.lastUpdate}>
-            Diperbarui: {lastUpdated ? lastUpdated.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '...'} WIB
-          </span>
-          <Link to="/map" className={styles.mapBtn}>Peta Jaringan →</Link>
-        </div>
       </header>
 
       <div className={styles.divider} />

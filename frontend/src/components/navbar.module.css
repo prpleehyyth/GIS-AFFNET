@@ -53,6 +53,14 @@
   letter-spacing: 0.5px;
 }
 
+/* ── Menu Wrapper ──────────────────────── */
+.menu {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+}
+
 /* ── Links ────────────────────────────── */
 .links { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; }
 .link {
@@ -87,3 +95,60 @@
   cursor: pointer; transition: all 0.15s;
 }
 .logoutBtn:hover { background: #fee2e2; }
+
+/* ── Mobile Toggle ────────────────────── */
+.mobileToggle {
+  display: none;
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+@media (max-width: 860px) {
+  .mobileToggle {
+    display: block;
+  }
+  
+  .menu {
+    display: none;
+    flex-direction: column;
+    position: absolute;
+    top: 58px;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .menuOpen {
+    display: flex;
+  }
+
+  .links {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .link {
+    justify-content: flex-start;
+  }
+
+  .right {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .separator {
+    display: none;
+  }
+
+  .logoutBtn {
+    width: 100%;
+  }
+}
